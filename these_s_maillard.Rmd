@@ -1,0 +1,68 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r data}
+load("data/french_users.RData")
+load("data/streams.RData")
+```
+
+
+```{r packages}
+library("tidyverse")
+library("lubridate")
+library("knitr")
+library("questionr")
+```
+
+## Stat descriptive
+
+```{r hist_age, fig.cap = "Distribution de l'âge des utilisateurs"}
+ggplot(u, aes(x = AGE, y = ..density..)) + geom_histogram()
+```
+
+```{r TP_date_inscription}
+# TODO avec les profils des comptes -- données Deezer
+```
+
+## 
+
+```{r temps_ecoute}
+ggplot(s, aes(x = LISTENING_TIME)) + 
+  geom_histogram() +
+  scale_y_continuous(trans = "log10")
+```
+
+## Durée d'écoute
+
+```{r}
+kable(freq(cut(s$LISTENING_TIME, breaks = c(0, 30, 60, 180, 600, 3600), include.lowest = TRUE)))
+```
+
+##
+```{r}
+ggplot(s, aes(x = listen_completion)) + 
+  geom_histogram()
+```
+
+## 
+
+```{r distribution_titres}
+count(s, SNG_ID) %>% 
+  count(n) %>% 
+  mutate(f = nn / sum(nn),
+         fcum = cumsum(f))
+
+## Nouveau souci
+## Ici, autour de 6 de moyennes de nombre d'écoute moyen d'un titre
+## Or, 17 fois dans la thèse
+count(s, SNG_ID) %>% summarise(mean(n))
+filter(s, LISTENING_TIME > 30) %>% count(SNG_ID) %>% summarise(mean(n))
+  
+```
+
