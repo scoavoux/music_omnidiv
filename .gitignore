@@ -2,3 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+*.pdf
+*.html
+*.Rproj
+base/orange
+base/DataSet_D_Orange.tar
+data
