@@ -13,6 +13,11 @@ rm(n)
 str(s)
 head(s)
 
+s <- mutate(s, support = factor(X9, levels = c("desktop", "mobile", "tablet", "web")))
+
+save(s, file = "data/streams.RData")
+
+
 u <- read_tsv("data/orig/orange_user_detail.tsv", col_names = c("user_hash", "date_birth", "gender", "date_registered", "city"), 
               col_types = "ccccc")
 # TODO: enlever les valeurs aberrantes (grands nombre de streams; cf. code Sisley)
