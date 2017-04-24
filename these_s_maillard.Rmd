@@ -42,8 +42,6 @@ u$city_r <- factor(u$city_r) %>%
 freq(u$city_r)
 ```
 
-
-
 ```{r TP_date_inscription}
 # maillard: p. 197
 cut(as.numeric(ymd("20140407") - u$date_registered), 
@@ -51,41 +49,5 @@ cut(as.numeric(ymd("20140407") - u$date_registered),
          labels = c("Nouveaux utilisateurs", "Moins d'un an", "Un à deux ans", "Deux à cinq ans", "Plus de cinq ans")) %>% 
   freq(cum = TRUE)
 
-```
-
-## 
-
-```{r temps_ecoute}
-ggplot(s, aes(x = LISTENING_TIME)) + 
-  geom_histogram() +
-  scale_y_continuous(trans = "log10")
-```
-
-## Durée d'écoute
-
-```{r}
-kable(freq(cut(s$LISTENING_TIME, breaks = c(0, 30, 60, 180, 600, 3600), include.lowest = TRUE)))
-```
-
-##
-```{r}
-ggplot(s, aes(x = listen_completion)) + 
-  geom_histogram()
-```
-
-## 
-
-```{r distribution_titres}
-count(s, SNG_ID) %>% 
-  count(n) %>% 
-  mutate(f = nn / sum(nn),
-         fcum = cumsum(f))
-
-## Nouveau souci
-## Ici, autour de 6 de moyennes de nombre d'écoute moyen d'un titre
-## Or, 17 fois dans la thèse
-count(s, SNG_ID) %>% summarise(mean(n))
-filter(s, LISTENING_TIME > 30) %>% count(SNG_ID) %>% summarise(mean(n))
-  
 ```
 
