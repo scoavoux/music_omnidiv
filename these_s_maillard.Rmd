@@ -9,25 +9,43 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r data}
 load("data/french_users.RData")
-load("data/streams.RData")
+# load("data/streams.RData")
 ```
 
 
 ```{r packages}
 library("tidyverse")
 library("lubridate")
+library("broom")
 library("knitr")
 library("questionr")
 ```
 
 ## Stat descriptive
 
-```{r hist_age, fig.cap = "Distribution de l'âge des utilisateurs"}
-ggplot(u, aes(x = AGE, y = ..density..)) + geom_histogram()
+```{r age_hist, fig.cap = "Distribution de l'âge des utilisateurs"}
+ggplot(u, aes(x = age, y = ..density..)) + geom_histogram()
 ```
 
+```{r age_distr}
+summary(u$age) %>% tidy() %>% kable(caption = "Distribution de l'âge")
+```
+
+```{r villes}
+## Trop grossier ; commencer par recoder/nettoyer les villes.
+u$city_r[!is.na(u$city)] <- "Autres villes"
+u$city_r[grep("paris", tolower(u$city))] <- "Paris"
+u$city_r[grep("lyon|toulouse|marseille|nantes|bordeayx|montpellier|rennes|lille", tolower(u$city))] <- "10 plus grandes villes hors Paris"
+
+u$city_r <- factor(u$city_r) %>% 
+  factor(., levels = rev(levels(.)))
+freq(u$city_r)
+```
+
+
 ```{r TP_date_inscription}
-# TODO avec les profils des comptes -- données Deezer
+cut(u$date_registered, 3)
+
 ```
 
 ## 
