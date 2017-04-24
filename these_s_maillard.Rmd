@@ -43,8 +43,13 @@ freq(u$city_r)
 ```
 
 
+
 ```{r TP_date_inscription}
-cut(u$date_registered, 3)
+# maillard: p. 197
+cut(as.numeric(ymd("20140407") - u$date_registered), 
+         breaks = c(-1, 7, 365, 365*2, 365*5, Inf),
+         labels = c("Nouveaux utilisateurs", "Moins d'un an", "Un à deux ans", "Deux à cinq ans", "Plus de cinq ans")) %>% 
+  freq(cum = TRUE)
 
 ```
 
