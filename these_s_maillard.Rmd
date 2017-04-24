@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Réplication thèse Maillard"
 output: html_document
 ---
 
@@ -9,9 +9,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r data}
 load("data/french_users.RData")
-# load("data/streams.RData")
+load("data/streams.RData")
 ```
 
+Ce document comporte une réplication des analyses du chapitre 6 de la thèse de Sisley Maillard
 
 ```{r packages}
 library("tidyverse")
@@ -21,33 +22,83 @@ library("knitr")
 library("questionr")
 ```
 
-## Stat descriptive
+## Description du dataset
 
 ```{r age_hist, fig.cap = "Distribution de l'âge des utilisateurs"}
-ggplot(u, aes(x = age, y = ..density..)) + geom_histogram()
+ggplot(us, aes(x = age, y = ..density..)) + geom_histogram()
 ```
 
+
+
 ```{r age_distr}
-summary(u$age) %>% tidy() %>% kable(caption = "Distribution de l'âge")
+summary(us$age) %>% tidy() %>% kable(caption = "Distribution de l'âge")
 ```
+
+
 
 ```{r villes}
 ## Trop grossier ; commencer par recoder/nettoyer les villes.
-u$city_r[!is.na(u$city)] <- "Autres villes"
-u$city_r[grep("paris", tolower(u$city))] <- "Paris"
-u$city_r[grep("lyon|toulouse|marseille|nantes|bordeayx|montpellier|rennes|lille", tolower(u$city))] <- "10 plus grandes villes hors Paris"
+us$city_r[!is.na(us$city)] <- "Autres villes"
+us$city_r[grep("paris", tolower(us$city))] <- "Paris"
+us$city_r[grep("lyon|toulouse|marseille|nantes|bordeayx|montpellier|rennes|lille", tolower(us$city))] <- "10 plus grandes villes hors Paris"
 
-u$city_r <- factor(u$city_r) %>% 
+us$city_r <- factor(us$city_r) %>% 
   factor(., levels = rev(levels(.)))
-freq(u$city_r)
+freq(us$city_r) %>% kable(CAPTION = "Distribution des usagers par ville")
 ```
+
+
 
 ```{r TP_date_inscription}
 # maillard: p. 197
 cut(as.numeric(ymd("20140407") - u$date_registered), 
          breaks = c(-1, 7, 365, 365*2, 365*5, Inf),
          labels = c("Nouveaux utilisateurs", "Moins d'un an", "Un à deux ans", "Deux à cinq ans", "Plus de cinq ans")) %>% 
-  freq(cum = TRUE)
+  freq(cum = TRUE) %>% 
+  kable(caption = "Distribution des usagers par date d'inscription")
 
+```
+
+
+
+```{r tri_plat_supports, fig.cap = "Distribution des écoutes par support (nombre d'écoute)"}
+df <- count(st, support)
+df <- filter(df, !is.na(support)) %>% 
+  mutate(f = n/sum(n) * 100)
+ggplot(df, aes(x = support, y = f)) + 
+  geom_col() +
+  coord_flip() +
+  theme_bw()
+```
+
+
+
+```{r tri_plat_supports_usagers, fig.cap = "Distribution des supports employés au moins une fois (total supérieur à 100%)"}
+df <- count(st, support, X1) %>% 
+  count(support) %>% 
+  filter(!is.na(support)) %>% 
+  mutate(f = nn / nrow(u) * 100)
+
+ggplot(df, aes(x = support, y = f)) + 
+  geom_col() +
+  coord_flip() +
+  theme_bw()
+
+```
+
+Pas de variable visible pour déterminer le type d'abonnement. On aura besoin du code de SM pour voir comme elle a fait.
+
+```{r tri_plat_usage_support_temps, fig.cap = "Distribution des supports employés (en temps cumulé)"}
+## supprimer les longueurs abérrantes (plus de deux heures)
+st <- mutate(st, X5 = ifelse(X5 > 60 * 120, NA, X5))
+df <- group_by(st, support) %>% 
+  summarize(t = sum(as.numeric(X5), na.rm = TRUE)) %>% 
+  filter(!is.na(support)) %>% 
+  mutate(f = t / sum(t) * 100)
+
+ggplot(df, aes(x = support, y = f)) + 
+  geom_col() +
+  coord_flip() +
+  theme_bw()
 ```
 
