@@ -4,7 +4,10 @@ library(lubridate)
 
 ###### Streams ######
 st <- read_tsv("data/orig/stream.tsv", 
-               col_names = c("user_id", "sng_id", "type_stream", "country", "length", "context_name", "context_id", "app_id", "app_type", "offer_id", "timestamp_off", "timestamp_sync", "pause", "seek", "timestamp"))
+               col_names = c("user_id", "sng_id", "type_stream", "country", "length", "context_name", "context_id", 
+                             "app_id", "app_type", "offer_id", "timestamp_off", "timestamp_sync", "pause", "seek", "timestamp"),
+               # réduire à 1M de lignes
+              n_max = 1000000)
 
 # remove rows that are badly imported (around 300 => we don't care)
 n <- unique(problems(st)$row)
@@ -29,17 +32,24 @@ rm(u)
 st <- filter(st, timestamp >= 1396310400 | is.na(timestamp))
 
 # Mettre les données au bon format
-st <- mutate(st, 
-             type_stream = factor(type_stream, 
+st <- mutate(st, type_stream = factor(type_stream, 
                                   levels = 0:2, 
                                   labels = c("MOD", "smartradio", "radio")),
-             timestamp = parse_date_time(timestamp, tz="Europe/Paris"),
+             timestamp = as_datetime(as.numeric(timestamp), tz="Europe/Paris"), 
              # Déjà recodé, on a pas les données brutes annoncées dans le dictionnaire des variables
              app_type = factor(app_type,
-                               levels = levels = c("desktop", "mobile", "tablet", "web")),
+                               levels = c("desktop", "mobile", "tablet", "web")),
              offer_id = ifelse(offer_id > 2, 3, offer_id) %>% 
                factor(levels = 0:3,
                       labels = c("Free", "Premium", "Premium+", "Partenaire")))
+
+## Temporalité de l'écoute
+st <- mutate(st, 
+             week = week(timestamp),
+             wday = wday(timestamp, label = TRUE),
+             yday = yday(timestamp),
+             hour = hour(timestamp))
+
 
 save(st, file = "data/streams.RData")
 
