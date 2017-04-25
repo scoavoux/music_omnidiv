@@ -4,12 +4,16 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      error = FALSE,
+                      message = FALSE)
 ```
 
 ```{r data}
 load("data/french_users.RData")
 load("data/streams.RData")
+load("data/songs_artists.RData")
 ```
 
 Ce document comporte une réplication des analyses du chapitre 6 de la thèse de Sisley Maillard
@@ -51,7 +55,7 @@ freq(us$city_r) %>% kable(CAPTION = "Distribution des usagers par ville")
 
 ```{r TP_date_inscription}
 # maillard: p. 197
-cut(as.numeric(ymd("20140407") - u$date_registered), 
+cut(as.numeric(ymd("20140407") - us$date_registered), 
          breaks = c(-1, 7, 365, 365*2, 365*5, Inf),
          labels = c("Nouveaux utilisateurs", "Moins d'un an", "Un à deux ans", "Deux à cinq ans", "Plus de cinq ans")) %>% 
   freq(cum = TRUE) %>% 
@@ -62,10 +66,10 @@ cut(as.numeric(ymd("20140407") - u$date_registered),
 
 
 ```{r tri_plat_supports, fig.cap = "Distribution des écoutes par support (nombre d'écoute)"}
-df <- count(st, support)
-df <- filter(df, !is.na(support)) %>% 
+df <- count(st, app_type)
+df <- filter(df, !is.na(app_type)) %>% 
   mutate(f = n/sum(n) * 100)
-ggplot(df, aes(x = support, y = f)) + 
+ggplot(df, aes(x = app_type, y = f)) + 
   geom_col() +
   coord_flip() +
   theme_bw()
@@ -74,31 +78,152 @@ ggplot(df, aes(x = support, y = f)) +
 
 
 ```{r tri_plat_supports_usagers, fig.cap = "Distribution des supports employés au moins une fois (total supérieur à 100%)"}
-df <- count(st, support, X1) %>% 
-  count(support) %>% 
-  filter(!is.na(support)) %>% 
-  mutate(f = nn / nrow(u) * 100)
+df <- count(st, app_type, user_id) %>% 
+  count(app_type) %>% 
+  filter(!is.na(app_type)) %>% 
+  mutate(f = nn / nrow(us) * 100)
 
-ggplot(df, aes(x = support, y = f)) + 
+ggplot(df, aes(x = app_type, y = f)) + 
   geom_col() +
   coord_flip() +
   theme_bw()
 
 ```
 
-Pas de variable visible pour déterminer le type d'abonnement. On aura besoin du code de SM pour voir comme elle a fait.
+
 
 ```{r tri_plat_usage_support_temps, fig.cap = "Distribution des supports employés (en temps cumulé)"}
 ## supprimer les longueurs abérrantes (plus de deux heures)
-st <- mutate(st, X5 = ifelse(X5 > 60 * 120, NA, X5))
-df <- group_by(st, support) %>% 
-  summarize(t = sum(as.numeric(X5), na.rm = TRUE)) %>% 
-  filter(!is.na(support)) %>% 
+st <- mutate(st, length = ifelse(length > 60 * 120, NA, length))
+df <- group_by(st, app_type) %>% 
+  summarize(t = sum(as.numeric(length), na.rm = TRUE)) %>% 
+  filter(!is.na(app_type)) %>% 
   mutate(f = t / sum(t) * 100)
 
-ggplot(df, aes(x = support, y = f)) + 
+ggplot(df, aes(x = app_type, y = f)) + 
   geom_col() +
   coord_flip() +
   theme_bw()
+```
+
+
+
+```{r ri_plat_type_abo}
+group_by(st, user_id) %>% 
+  summarise(t = first(offer_id)) %>% 
+  count(t) %>%  kable(caption = "Distribution des forfaits employés")
+```
+
+
+```{r tri_source_ecoute}
+freq(st$app_type) %>% kable(caption = "Distribution des terminaux employés")
+```
+
+```{r}
+cprop(table(st$app_type, st$offer_id)) %>% kable(caption = "Plateformes d'écoutes par type d'abonnement (base = toutes les écoutes)")
+```
+
+
+## Consommation musicale en streaming: volumes, durées et diversité des écoutes
+
+### Durée d'écoute des titres
+
+```{r duree_ecoute}
+# 5% de durée d'écoute négative... NA?
+# sum(st$length < 0) / nrow(st)
+st$length[st$length < 0] <- NA
+summary(st$length)
+freq(st$length > 30) %>% kable(caption = "Part des écoutes supérieures à 30 secondes")
+# très divergent avec Sisley. pas la bonne variable?
+```
+
+
+
+```{r titre_plus_ecoute}
+df <- count(st, sng_id) %>% 
+  arrange(n)
+summary(df$n)
+ggplot(df, aes(x = n)) + 
+  geom_point(stat = "bin") + 
+  scale_x_log10() + 
+  scale_y_log10()
+
+# Nombre d'écoutes minimales des cinq titres les plus écoutés
+slice(df, (n()-5))$n
+```
+
+### Saisonnalité des écoutes
+
+```{r ecoutes_par_semaine}
+ggplot(st, aes(x = week)) + 
+  geom_point(stat = "count") +
+  geom_line(stat = "count")
+```
+
+
+
+```{r ecoutes_par_jour_heure}
+ggplot(st, aes(x = hour, linetype = wday, colour = wday)) + 
+  geom_line(stat = "count")
+```
+
+### Volume d'écoute totale
+
+```{r volume_ecoute_histogramme}
+count(st, user_id) %>% 
+  ggplot(aes(x = n)) +
+    geom_histogram()
+
+```
+
+
+```{r volume_ecoute_}
+count(st, user_id) %>% 
+  summarize(mean = mean(n),
+            median = median(n),
+            standard_deviance = sd(n)) %>% 
+  kable(caption = "Distribution du nombre d'écoutes sur les cinq mois")
+```
+
+
+
+```{r summary_volume}
+group_by(st, user_id) %>% 
+  summarise(nb_ecoute = n(),
+            nb_jour = n_distinct(yday),
+            nb_ecoutes_perdiem = nb_ecoute / nb_jour,
+            duree_perdiem_minutes = sum(length, na.rm = TRUE) / (60* nb_jour)) %>% 
+  select(-user_id) %>% 
+  gather(key, value) %>% 
+  group_by(key) %>% 
+  summarize_all(funs(length, min, max, mean, median, sd)) %>% 
+  kable(caption = "Résumé des variables de fréquence d'écoute")
+```
+
+## Diversité de la consommation
+
+```{r nombre_artistes_perdiem, fig.cap = "Nombre d'artistes différents écoutés par jour"}
+left_join(st, so, by="sng_id") %>% 
+  count(yday, art_id) %>% 
+  summarise(n = n()) %>% 
+  ggplot(aes(x = yday, y = n)) +
+    geom_point() +
+    geom_line()
+
+```
+
+
+```{r diversite_ecoute}
+# variété individuelle
+left_join(st, so, by="sng_id") %>% 
+  group_by(user_id) %>% 
+  summarise(nb_tracks = n_distinct(sng_id),
+            nb_artists = n_distinct(art_id)) %>% 
+  select(-user_id) %>% 
+  gather(key, value) %>% 
+  group_by(key) %>% 
+  summarize_all(funs(length, min, max, mean, median, sd)) %>% 
+  kable(caption = "Résumé des variables de variété de l'écoute")
+
 ```
 
