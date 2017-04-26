@@ -11,8 +11,8 @@ knitr::opts_chunk$set(echo = FALSE,
 ```
 
 ```{r data}
-load("data/french_users.RData")
 load("data/streams.RData")
+load("data/french_users.RData")
 load("data/songs_artists.RData")
 ```
 
@@ -93,8 +93,6 @@ ggplot(df, aes(x = app_type, y = f)) +
 
 
 ```{r tri_plat_usage_support_temps, fig.cap = "Distribution des supports employés (en temps cumulé)"}
-## supprimer les longueurs abérrantes (plus de deux heures)
-st <- mutate(st, length = ifelse(length > 60 * 120, NA, length))
 df <- group_by(st, app_type) %>% 
   summarize(t = sum(as.numeric(length), na.rm = TRUE)) %>% 
   filter(!is.na(app_type)) %>% 
@@ -129,9 +127,6 @@ cprop(table(st$app_type, st$offer_id)) %>% kable(caption = "Plateformes d'écout
 ### Durée d'écoute des titres
 
 ```{r duree_ecoute}
-# 5% de durée d'écoute négative... NA?
-# sum(st$length < 0) / nrow(st)
-st$length[st$length < 0] <- NA
 summary(st$length)
 freq(st$length > 30) %>% kable(caption = "Part des écoutes supérieures à 30 secondes")
 # très divergent avec Sisley. pas la bonne variable?
