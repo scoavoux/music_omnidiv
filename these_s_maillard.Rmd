@@ -24,12 +24,39 @@ library("lubridate")
 library("broom")
 library("knitr")
 library("questionr")
+
+# Options
+theme_set(theme_bw())
 ```
 
-## Description du dataset
+# Description du dataset
+
+## Description des usagers
+```{r distribution_pays}
+# Supprimé pour gagner de la mémoire
+#factor(st$country == "FR", levels = c(TRUE, FALSE), labels = c("France", "Another country")) %>% 
+#  freq(exclude = NA) %>% 
+#  kable(caption = "Distribution des écoutes par pays")
+```
+
+
+```{r villes}
+## Trop grossier ; commencer par recoder/nettoyer les villes.
+city_r <- us$city
+city_r[!is.na(us$city)] <- "Autres villes"
+city_r[grep("paris", tolower(us$city))] <- "Paris"
+city_r[grep("lyon|toulouse|marseille|nantes|bordeayx|montpellier|rennes|lille", tolower(us$city))] <- "10 plus grandes villes hors Paris"
+
+city_r <- factor(city_r) %>% 
+  factor(., levels = rev(levels(.)))
+freq(city_r) %>% kable(caption = "Distribution des usagers par ville")
+rm(city_r)
+```
+
+
 
 ```{r age_hist, fig.cap = "Distribution de l'âge des utilisateurs"}
-ggplot(us, aes(x = age, y = ..density..)) + geom_histogram()
+filter(us, age < 90 ) %>% ggplot(aes(x = age, y = ..density..)) + geom_histogram()
 ```
 
 
@@ -39,31 +66,29 @@ summary(us$age) %>% tidy() %>% kable(caption = "Distribution de l'âge")
 ```
 
 
+```{r age_distr_quantile}
+quantile(us$age, na.rm = TRUE, probs = seq(0, 1, .1)) %>% tidy() %>% kable(caption = "Quantiles de la distribution de l'âge")
+```
 
-```{r villes}
-## Trop grossier ; commencer par recoder/nettoyer les villes.
-us$city_r[!is.na(us$city)] <- "Autres villes"
-us$city_r[grep("paris", tolower(us$city))] <- "Paris"
-us$city_r[grep("lyon|toulouse|marseille|nantes|bordeayx|montpellier|rennes|lille", tolower(us$city))] <- "10 plus grandes villes hors Paris"
 
-us$city_r <- factor(us$city_r) %>% 
-  factor(., levels = rev(levels(.)))
-freq(us$city_r) %>% kable(CAPTION = "Distribution des usagers par ville")
+```{r tri_plat_genre}
+freq(us$gender, exclude = NA) %>% kable(caption = "Distribution du genre")
 ```
 
 
 
 ```{r TP_date_inscription}
 # maillard: p. 197
-cut(as.numeric(ymd("20140407") - us$date_registered), 
-         breaks = c(-1, 7, 365, 365*2, 365*5, Inf),
-         labels = c("Nouveaux utilisateurs", "Moins d'un an", "Un à deux ans", "Deux à cinq ans", "Plus de cinq ans")) %>% 
-  freq(cum = TRUE) %>% 
+us <- mutate(us, dist_inscription = cut(as.numeric(ymd("20140407") - us$date_registered), 
+                                        breaks = c(-1, 7, 365, 365*2, 365*5, Inf),
+                                        labels = c("Nouveaux utilisateurs", "Moins d'un an", "Un à deux ans", "Deux à cinq ans", "Plus de cinq ans")))
+
+freq(us$dist_inscription, cum = TRUE, exclude = NA) %>% 
   kable(caption = "Distribution des usagers par date d'inscription")
 
 ```
 
-
+## Description des supports d'écoute
 
 ```{r tri_plat_supports, fig.cap = "Distribution des écoutes par support (nombre d'écoute)"}
 df <- count(st, app_type)
@@ -72,7 +97,7 @@ df <- filter(df, !is.na(app_type)) %>%
 ggplot(df, aes(x = app_type, y = f)) + 
   geom_col() +
   coord_flip() +
-  theme_bw()
+  labs(x = "Fréquence", y = "Support")
 ```
 
 
@@ -86,7 +111,7 @@ df <- count(st, app_type, user_id) %>%
 ggplot(df, aes(x = app_type, y = f)) + 
   geom_col() +
   coord_flip() +
-  theme_bw()
+  labs(x = "Fréquence", y = "Support")
 
 ```
 
@@ -101,7 +126,7 @@ df <- group_by(st, app_type) %>%
 ggplot(df, aes(x = app_type, y = f)) + 
   geom_col() +
   coord_flip() +
-  theme_bw()
+  labs(x = "Fréquence", y = "Support")
 ```
 
 
@@ -117,24 +142,45 @@ group_by(st, user_id) %>%
 freq(st$app_type) %>% kable(caption = "Distribution des terminaux employés")
 ```
 
-```{r}
+
+```{r supportXabonnement}
 cprop(table(st$app_type, st$offer_id)) %>% kable(caption = "Plateformes d'écoutes par type d'abonnement (base = toutes les écoutes)")
 ```
 
+Manque ici: hors connexion et usage des recommandations.
 
-## Consommation musicale en streaming: volumes, durées et diversité des écoutes
+# Consommation musicale en streaming: volumes, durées et diversité des écoutes
 
-### Durée d'écoute des titres
+## Durée d'écoute des titres
 
 ```{r duree_ecoute}
-summary(st$length)
-freq(st$length > 30) %>% kable(caption = "Part des écoutes supérieures à 30 secondes")
+freq(factor(st$length > 30, levels = c(FALSE, TRUE), labels = c("Moins de 30 secondes", "Plus de 30 secondes"))) %>%
+  kable(caption = "Part des écoutes supérieures à 30 secondes")
 # très divergent avec Sisley. pas la bonne variable?
 ```
 
 
+```{r nb_titres_ecoute_longtemps}
+# Part des titres écoutés au moins une fois plus de trente secondes.
+group_by(st, sng_id) %>% 
+  summarize(e = sum(length > 30)) %>% 
+  filter(e > 0) %>% 
+  nrow() / n_distinct(st$sng_id)
+```
 
-```{r titre_plus_ecoute}
+
+```{r distri_ecoute_plus_trente, fig.cap= "Distribution du nombre d'écoutes pour les écoutes de plus de trente secondes"}
+group_by(st, sng_id) %>% 
+  summarize(e = sum(length > 30)) %>% 
+  filter(e > 0) %>% 
+  ggplot(aes(x = e)) +
+    geom_histogram() +
+    scale_x_log10()
+```
+
+
+
+```{r titre_plus_ecoute, fig.cap = "Distribution du nombre d'écoute (log x log)"}
 df <- count(st, sng_id) %>% 
   arrange(n)
 summary(df$n)
@@ -147,9 +193,20 @@ ggplot(df, aes(x = n)) +
 slice(df, (n()-5))$n
 ```
 
+
+
+```{r artistes_plus_ecoutes}
+count(st, art_id) %>% 
+  arrange(desc(n)) %>% 
+  slice(1:50) %>% 
+  left_join(select(ar, art_id, art_name)) %>% 
+  kable(caption = "Artistes les plus écoutés")
+```
+
+
 ### Saisonnalité des écoutes
 
-```{r ecoutes_par_semaine}
+```{r ecoutes_par_semaine, fig.cap = "Distribution des écoutes par semaine"}
 ggplot(st, aes(x = week)) + 
   geom_point(stat = "count") +
   geom_line(stat = "count")
@@ -157,14 +214,14 @@ ggplot(st, aes(x = week)) +
 
 
 
-```{r ecoutes_par_jour_heure}
+```{r ecoutes_par_jour_heure, fig.cap = "Distribution des écoutes par heure et par jour"}
 ggplot(st, aes(x = hour, linetype = wday, colour = wday)) + 
   geom_line(stat = "count")
 ```
 
 ### Volume d'écoute totale
 
-```{r volume_ecoute_histogramme}
+```{r volume_ecoute_histogramme, fig.cap = "Distribution du volume total d'écoute"}
 count(st, user_id) %>% 
   ggplot(aes(x = n)) +
     geom_histogram()
@@ -172,7 +229,9 @@ count(st, user_id) %>%
 ```
 
 
-```{r volume_ecoute_}
+
+
+```{r volume_ecoute_summary}
 count(st, user_id) %>% 
   summarize(mean = mean(n),
             median = median(n),
@@ -195,11 +254,53 @@ group_by(st, user_id) %>%
   kable(caption = "Résumé des variables de fréquence d'écoute")
 ```
 
+
+
+
+```{r summary_volume_premium}
+mutate(st, offer_id = ifelse(offer_id == "Free", "Gratuit", "Premium")) %>% 
+  group_by(offer_id, user_id) %>% 
+  summarise(nb_ecoute = n(),
+            nb_jour = n_distinct(yday),
+            nb_ecoutes_perdiem = nb_ecoute / nb_jour,
+            duree_perdiem_minutes = sum(length, na.rm = TRUE) / (60* nb_jour)) %>% 
+  select(-user_id) %>% 
+  gather(key, value, -offer_id) %>% 
+  group_by(key, offer_id) %>% 
+  summarize(length = n(),
+            min = min(value), 
+            max = max(value), 
+            mean = mean(value), 
+            median = median(value), 
+            sd = sd(value)) %>% 
+  arrange(offer_id, key) %>% 
+  kable(caption = "Résumé des variables de fréquence d'écoute, gratuits vs. payant")
+```
+
+
 ## Diversité de la consommation
 
+
+```{r artiste_solitaires, eval = FALSE}
+## Artistes écoutés par un seul individu
+group_by(st, art_id) %>%
+  summarize(n = n_distinct(user_id),
+         sol = n == 1) %>%
+  count(sol) %>% 
+  kable(caption = "Artistes écoutés par un seul usager")
+  
+library(microbenchmark)
+microbenchmark(as.data.table(st)[, .((length(unique(user_id)) == 1)), by = art_id],
+               group_by(st, art_id) %>%
+                 summarize(n = n_distinct(user_id),
+                           sol = n == 1) %>%
+                 count(sol))
+```
+
+
+
 ```{r nombre_artistes_perdiem, fig.cap = "Nombre d'artistes différents écoutés par jour"}
-left_join(st, so, by="sng_id") %>% 
-  count(yday, art_id) %>% 
+count(st, yday, art_id) %>% 
   summarise(n = n()) %>% 
   ggplot(aes(x = yday, y = n)) +
     geom_point() +
@@ -210,8 +311,7 @@ left_join(st, so, by="sng_id") %>%
 
 ```{r diversite_ecoute}
 # variété individuelle
-left_join(st, so, by="sng_id") %>% 
-  group_by(user_id) %>% 
+group_by(st, user_id) %>% 
   summarise(nb_tracks = n_distinct(sng_id),
             nb_artists = n_distinct(art_id)) %>% 
   select(-user_id) %>% 
@@ -222,3 +322,146 @@ left_join(st, so, by="sng_id") %>%
 
 ```
 
+## Corrélations de diversité
+
+
+```{r}
+## df avec diversité par usager
+df <- group_by(st, user_id) %>% 
+  summarise(nb_tracks = n_distinct(sng_id),
+            nb_artists = n_distinct(art_id),
+            volume_ecoute = sum(length), 
+            freq_mobile = sum(app_type == "mobile", na.rm = TRUE)/n(),
+            freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / n(),
+            nb_dispositifs = n_distinct(context_cat), 
+            freq_star = sum(sng_popularite == "Star", na.rm = TRUE) / n(),
+            freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
+  right_join(us)
+```
+
+
+```{r corr_diversite_intensite}
+
+select(df, nb_tracks, nb_artists, volume_ecoute) %>% 
+  cor(use = "complete.obs") %>% 
+  kable(caption = "Corrélations entre diversité des artistes, diversité des pistes, et volume global d'écoute")
+```
+
+
+
+```{r corr_diversite}
+mutate(df, inscr = as.numeric(ymd("20140407") - date_registered)) %>% 
+  select(nb_tracks, nb_artists, volume_ecoute, age, inscr, freq_mobile, freq_radio, nb_dispositifs, freq_star, freq_nouveaute) %>%   
+  cor(use = "complete.obs") %>% 
+  kable(caption = "Corrélation entre diversité de l'écoute et variables indépendantes")
+
+
+```
+
+```{r corr_diversite_matrix}
+source("https://raw.githubusercontent.com/briatte/ggcorr/master/ggcorr.R")
+mutate(df, inscr = as.numeric(ymd("20140407") - date_registered)) %>% 
+  select(nb_tracks, nb_artists, volume_ecoute, age, inscr, freq_mobile, freq_radio, nb_dispositifs, freq_star, freq_nouveaute) %>% 
+  ggcorr()
+```
+
+## Popularité
+
+```{r distribution_pop_artistes}
+ggplot(st, aes(x = art_popularite)) +
+  geom_bar()
+
+```
+
+
+```{r distribution_pop_songs}
+ggplot(st, aes(x = sng_popularite)) +
+  geom_bar()
+```
+
+```{r distribution_nb_auditeurs_par_art, fig.cap = "Distribution du nombre d'auditeurs par artiste"}
+df <- group_by(st, art_id) %>% 
+  summarize(aud = n_distinct(user_id))
+
+ggplot(df, aes(aud)) + 
+  geom_histogram() +
+  scale_x_log10()
+```
+
+
+```{r distribution_nb_ecoutes_par_art, fig.cap="Distribution du nombre d'écoutes par artiste"}
+df <- group_by(st, art_id) %>% 
+  summarize(aud = n())
+
+ggplot(df, aes(aud)) + 
+  geom_histogram() +
+  scale_x_log10()
+```
+
+
+## Dispositifs
+
+```{r qualifie_nonqualifie}
+freq(st$context_cat, sort = "dec") %>% 
+  kable(caption = "Distribution des dispositifs employés")
+
+```
+
+
+```{r create_stnq}
+# réduire à écoutes qualifiées
+stnq <- filter(st, !(context_cat %in% c("stock", "ND", "unknown") | is.na(context_cat)))
+```
+
+
+
+```{r distribution_ecoutes_qualifies}
+group_by(stnq, context_cat) %>% 
+  summarise(n = n(),
+            f = round(n / nrow(stnq)*100, 1),
+            usagers_distincts = n_distinct(user_id),
+            usage_moyen = round(n/usagers_distincts, 1)) %>% 
+  kable(caption = "Distribution des dispositifs d'écoutes qualifiées")
+```
+
+
+```{r distribution_nb_dispositifs, fig.cap= "Distribution du nombre de dispositifs employés"}
+df <- group_by(st, user_id) %>% 
+  summarize(disp = n_distinct(context_cat))
+ggplot(df, aes(disp)) + geom_bar()
+```
+
+
+
+## Premiere écoute
+
+```{r data_premiere_fois}
+## Créer un sous-ensemble de tracks écoutées pour la première fois (artiste écouté pour la première fois & non-favori)
+stpf <- group_by(st, user_id, art_id) %>% 
+  mutate(n_reecoute = n()) %>% 
+  arrange(timestamp) %>% 
+  slice(1) %>% 
+  filter(context_cat != "stock")
+```
+
+
+```{r distribution_dispositif_premiere_ecoute}
+freq(stpf$context_cat, sort = "dec") %>% 
+  kable(caption = "Distribution des dispositifs pour les premières écoutes (première écoute d'un artiste non favori au moment de l'écoute)")
+```
+
+
+```{r association_dispositif_popularite_premiereecoute}
+table(stpf$context_cat, stpf$art_popularite) %>% 
+  lprop() %>% 
+  kable(digits = 1, caption = "Association entre dispositif et popularité de l'artiste pour les premières écoutes")
+```
+
+
+```{r distribution_nombre_reecoute_par_dispositif_premiereecoute}
+group_by(stpf, context_cat) %>% 
+  summarize(mean = mean(n_reecoute),
+            median = median(n_reecoute),
+            sd = sd(n_reecoute)) %>% 
+  kable(caption = "Distribution du nombre de réécoute par dispositif de première écoute / non_favori")
+```

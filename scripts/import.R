@@ -10,7 +10,11 @@ so <- read_tsv("data/orig/song_catalog.tsv",
 
 
 ## Corriger les chansons dont la durée est abérrante (> 2h)
-so <- mutate(so, duration = ifelse(duration > 3600*2, NA, duration))
+so <- mutate(so, duration = ifelse(duration > 3600*2, NA, duration)) %>% 
+## Corriger les dates
+  mutate_at(.cols = vars(ends_with("_release")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd())) %>% 
+## Nouveauté
+  mutate(nouveaute = factor(year(physical_release) >= 2014 | year(digital_release) >= 2014, levels = c(TRUE, FALSE), labels = c("Nouveauté", "Pas une nouveauté")))
 
 ###### Artists ######
 
@@ -21,9 +25,9 @@ ar <- read_tsv("data/orig/artist_catalog.tsv",
 ###### Streams ######
 st <- read_tsv("data/orig/stream.tsv", 
                col_names = c("user_id", "sng_id", "type_stream", "country", "length", "context_name", "context_id", 
-                             "app_id", "app_type", "offer_id", "timestamp_off", "timestamp_sync", "pause", "seek", "timestamp"),
+                             "app_id", "app_type", "offer_id", "timestamp_off", "timestamp_sync", "pause", "seek", "timestamp")
                # réduire à 1M de lignes
-              n_max = 1000000)
+               )
 
 
 ## Note: Code de Sisley ne documente pas comment elle a fait.
@@ -59,20 +63,41 @@ st <- mutate(st, type_stream = factor(type_stream,
 ## Temporalité de l'écoute
 st <- mutate(st, 
              week = week(timestamp),
-             wday = wday(timestamp, label = TRUE),
+             wday = lubridate::wday(timestamp, label = TRUE),
              yday = yday(timestamp),
              hour = hour(timestamp))
+
+st <- st %>%  mutate(activite = case_when(.$type_stream != "MOD" ~ "Passive",
+                                      .$type_stream == "MOD" & .$context_name %in%
+                                        c("radio_page", "feed_user_radio" , "collection_radio" , 
+                                          "profile_radios", "artist_smartradio", "smartradio_page", 
+                                          "feed_smartradio", "playlist_radio", "notification_genreradio") ~ "Passive",
+                                      .$context_name != "unknown" & !is.na(.$context_name) ~ "Active",
+                                      TRUE ~ NA_character_) %>% factor())
+
 
 ## Temps d'écoute
 
 ## Vérifier que longueur moindre que longueur de la piste
-st <- select(so, sng_id, duration) %>% 
+## + ajouter année de diffusion
+st <- select(so, sng_id, art_id, duration) %>% 
   right_join(st, by = "sng_id") %>% 
   mutate(length = ifelse(length > duration, duration, length))
 
 # 5% de durée d'écoute négative... NA?
 # sum(st$length < 0) / nrow(st)
 st$length[st$length < 0] <- NA
+
+## Popularité des titres et artistes
+st <- group_by(st, sng_id) %>% 
+  mutate(nb_ecoutes_sng = n()) %>% 
+  group_by(art_id) %>% 
+  mutate(nb_ecoutes_art = n()) %>% 
+  ungroup() %>% 
+  mutate(sng_popularite = cut(nb_ecoutes_sng, breaks = c(0, 2, 60, 1e20),  labels = c("Tail", "Mid-tail", "Star")),
+         art_popularite = cut(nb_ecoutes_art, breaks = c(0, 2, 227, 1e20), labels = c("Tail", "Mid-tail", "Star")))
+
+## Nouveauté
 
 ###### Users ######
 
@@ -129,7 +154,7 @@ us <- filter(far, add == 1) %>%
   rename(nb_fav_artists = n) %>% 
   right_join(us, by = "user_id")
 
-st <- select(so, sng_id, art_id) %>% 
+st <- select(so, sng_id, nouveaute) %>% 
   right_join(st, by = "sng_id") %>% 
   left_join(filter(far, add == 1) %>% select(-add)) %>% 
   mutate(fav_artist = factor(case_when(is.na(.$timestamp_favartist) ~ "Not favorite",
@@ -149,6 +174,34 @@ st <- select(so, sng_id, art_id) %>%
 #                                         levels = c("Not favorite", "Not yet favorite", "Favorite")))
 
 
+
+st <- st %>% mutate(context_name2 = ifelse(fav_artist == "Favorite" | fav_song == "Favorite",
+                                          "favorite",
+                                          context_name),
+                    context_cat = ifelse(context_name2 %in% c("tops_album", "tops_playlist", "tops_track"), "top", NA),
+                    context_cat = ifelse(context_name2 %in% c("ticker_album" , "ticker_playlist" , "ticker_track" , "recommendations_friend_share_album" , "facebook_track"), "social", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("radio_page"), "radio_editoriale", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("artist_smartradio" , "smartradio_page"), "smartradio", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("profile_user_radio", "playlist_radio"), "radio_flow", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("feed_user_radio"), "feed_radio", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("feed_smartradio"), "feed_smartradio", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("feed_album"), "feed_album", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("feed_playlist"), "feed_playlist", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("feed_track" , "suggest_track" , "notification_track"), "feed_track", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("artist_discography"), "artist_disco", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("artist_top"), "artist_top", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("explore_releases_album"), "explore_release", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("folder_page", "favorite", "history_page", "inapp_page", "loved_page", "collection_album", "collection_radio", "collection_playlist", "profile_albums", "profile_history", "profile_top", "profile_top_albums", "profile_top_tracks", "profile_playlists", "personnalsong_page", "profile_radios"), "stock", context_cat) ,
+                    context_cat = ifelse(context_name2 %in% c("search_page"), "search", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("album_page", "track_page", "playlist_page"), "ND", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("unknown"), "unknown", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("player_default_playlist"), "player_defaut", context_cat),
+                    context_cat = ifelse(context_name2 %in% c("selection_album", "explore_picks_album", "explore_region_album"), "experts_editor", context_cat))
+
+# context_cat= ifelse(context_cat   %in% c("feed_smartradio", "feed_radio", "feed_album", "feed_playlist", "feed_track"), "perso", context_cat)
+# context_cat= ifelse(context_cat   %in% c("radio_editoriale", "smartradio", "radio_flow"), "radios", context_cat)
+# context_cat= ifelse(context_cat   %in% c("artist_disco", "artist_top"), "contextuel", context_cat)
+
 ###### Fav albums ######
 fal <- read_tsv("data/orig/fav_albums.tsv",
                 col_names = c("user_id", "alb_id", "add", "timestamp_favalbum"))
@@ -158,6 +211,12 @@ fal <- read_tsv("data/orig/fav_albums.tsv",
 alf <- read_tsv("data/orig/album_fav.tsv", 
                 col_names = c("alb_id", "art_id", "label_id", "digital_release",
                               "physical_release", "alb_title", "rank", "nb_fans"))
+
+
+###### Clean-up  ######
+## Remove some unused variable so that knitting becomes possible
+st <- select(st, -duration, -type_stream, -country, -context_name, -context_name2, -context_id, -app_id, -timestamp_off, -timestamp_sync, -pause, -seek)
+gc()
 
 save(fs, fal, far, alf, file = "data/favorites.RData")
 save(us, file = "data/french_users.RData")
