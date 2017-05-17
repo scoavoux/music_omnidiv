@@ -23,7 +23,7 @@ ar <- read_tsv("data/orig/artist_catalog.tsv",
 
 
 ###### Streams ######
-if(!exists("NMAX")) NMAX <- Inf
+if(!exists("NMAX")) NMAX <- 1e6
 
 st <- read_tsv("data/orig/stream.tsv", 
                col_names = c("user_id", "sng_id", "type_stream", "country", "length", "context_name", "context_id", 

@@ -10,3 +10,5 @@ base/DataSet_D_Orange.tar
 data
 data_2013.zip
 code_sisley/
+*.todo
+journal.md
