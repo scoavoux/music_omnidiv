@@ -1,3 +1,15 @@
+# Ce script prend en entrée les genres au format brut, 
+# tels que produit par le script genre_scraping.R, 
+# et ressort une base donnant un genre unique par album
+# (avec 8% de NA environ).
+# 
+# Contient l'ensemble de la démarche suivie pour le codage
+# des genres. On est parti de 91 genres différents pour arriver
+# à 20 genres unique, en éliminant les plus petits ou les moins
+# musicaux, en agrégeant jusqu'à n'avoir que des genres faisant
+# sens, puis en fixant une liste de priorité pour que le genre
+# unique soit le plus raffiné possible.
+
 library(tidyverse)
 load("data/genres_raw.RData")
 
@@ -118,135 +130,16 @@ genres <- distinct(genres, alb_id, name, .keep_all = TRUE)
 # et on va vers les plus généraux). On perd de l'information, 
 # mais on passe à un genre par album/chanson.
 
+## NB: on supprime le genre Variété internationale.
 genres_order <- c("Jeunesse", "Comédies musicales", "Chanson française", "Metal", 
                   "Soul", "Jazz", "Blues", "Country & Folk", "World music", "R&B",
                     "Reggae", "Classique", "Rap/Hip Hop", "Dance", "Electro", "Alternative", 
-                  "Rock", "Pop", "Films/Jeux vidéo", "Variété Internationale")
+                  "Rock", "Pop", "Films/Jeux vidéo")
 
-genres <- mutate(genres, name = factor(name, levels = genres_order)) %>% 
+gnr <- mutate(genres, name = factor(name, levels = genres_order)) %>% 
   group_by(alb_id) %>% 
   arrange(name) %>% 
   slice(1) %>% 
-  # reste 4 variété internationale qui traînent... On les agrége à pop
-  mutate(name = ifelse(name == "Variété Internationale", "Pop", name) %>% 
-           factor(levels = genres_order[-length(genres_order)])) 
+  select(-ngnr)
 
 save(genres, file = "data/genres.RData")
-
-###### HELPERS ######
-
-## Diverses manières d'explorer les données en vue du recodage
-
-## Fonction pour tester l'avancée du recodage.
-## Objectif: 100% des albumes avec un seul genre
-test <- function(genres){
-  x <- count(genres, alb_id) %>% 
-    filter(n == 1L)
-  results <- c("Nombre d'albums différents" = length(unique(genres$alb_id)),
-               "Nb d'albums à un genre" = nrow(x),
-               "Proportion d'albums à un genre" = nrow(x)/length(unique(genres$alb_id))*100,
-               "Nombre de genres uniques" = length(unique(genres$name)),
-               "Nombre de NA" = sum(is.na(genres$name)))
-  return(round(results))
-
-}
-
-## Fonctions pour visualiser les artistes
-## à cheval sur plusieurs genres
-load("data/songs_artists.RData")
-so <- distinct(so, alb_id, .keep_all = TRUE) %>% left_join(ar, by = "art_id") %>% select(alb_id, digital_release, art_name)
-
-pr <- function(na, not = NULL, gnr = genres){
-  x <- group_by(gnr, alb_id) %>% 
-    filter(any(name == na)) %>% 
-    ungroup() %>% 
-    left_join(select(so, alb_id, art_name))
-  
-  if(!is.null(not)){
-    x <- group_by(x, alb_id) %>% 
-      filter(!(any(name == not))) %>% 
-      ungroup()
-  }
-  
-}
-
-pr2 <- function(na, not = NULL, gnr = genres){
-  x <- group_by(gnr, alb_id) %>% 
-    filter(any(name == na[1]) & any(name == na[2])) %>% 
-    ungroup() %>% 
-    left_join(select(so, alb_id, art_name)) %>% 
-    distinct(art_name) %>% arrange(art_name)
-  
-  if(!is.null(not)){
-    x <- group_by(x, alb_id) %>% 
-      filter(!(any(name == not))) %>% 
-      ungroup()
-  }
-  print(x, n=Inf)
-  
-}
-
-
-test(genres)
-library(questionr)
-freq(genres$name, sort = "dec")
-
-genres <- group_by(genres, alb_id) %>% mutate(ngnr = n()) %>% ungroup()
-
-## From rmarkdown
-df <- genres %>% 
-  select(alb_id, name) %>% 
-  filter(!is.na(name)) %>% 
-  mutate(x=1) %>% 
-  spread(name, x, fill = 0)
-
-library(FactoMineR)
-gpca <- PCA(select(df, -alb_id), graph=FALSE)
-dimdesc(gpca)
-plot(gpca)
-hc <- HCPC(gpca, kk = 1000, graph=FALSE)
-library(ClustOfVar)
-
-df <- select(df, -alb_id) %>% mutate_all(as.numeric)
-dd <- as.matrix(df)
-hc <- hclustvar(X.quanti = dd)
-
-library("amap")
-dt <- select(df, -alb_id) %>% burt()
-db <- as.data.frame(dt)
-db <- select(db, ends_with("0")) %>% 
-  rownames_to_column() %>% 
-  filter(grepl("0$", rowname))
-db$rowname <- sub("(.*)\\.0", "\\1", db$rowname)
-names(db) <- sub("(.*)\\.0", "\\1", names(db))
-
-db2 <- gather(db, key, value, -rowname) %>% 
-  mutate_if(.predicate = is.character, .funs = funs(sub("(.*)\\.0$", "\\1", .))) %>% 
-  mutate(value = as.integer(value)) %>% 
-  group_by(key) %>%
-  filter(!(rowname == key)) %>% 
-  group_by(key) %>% 
-  arrange(desc(value)) %>% 
-  slice(1:4) %>% 
-  select(name = key, rowname, value) %>% 
-  group_by(name) %>% slice(1)
-
-group_by(db2, key) %>% slice(1)
-
-gt <- group_by(genres, name) %>% 
-  summarize(n = n(),
-            unique = any(ngnr == 1)) %>% 
-  # mutate(f = n / sum(n) * 100) %>% 
-  arrange(n) %>% 
-  left_join(db2, by = "name")
-
-
-print(gt, n= 50)
-
-summary(genres$ngnr)
-
-filter(genres, (ngnr > 1 & name %in% gt$name[gt$f < 0.5]))
-
-filter(genres, !(ngnr > 1 & name %in% gt$name[gt$f < 0.1] & name %in% gt$name[!gt$unique])) %>% test()
-
-
