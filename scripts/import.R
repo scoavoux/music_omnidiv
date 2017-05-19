@@ -1,3 +1,9 @@
+# author: Samuel Coavoux
+# date: avril 2017
+
+## Produire une base de données (un ensemble de bases)
+## propres à partir des données brutes Deezer
+
 ###### Packages ######
 library(tidyverse)
 library(lubridate)
@@ -284,3 +290,9 @@ save(fs, fal, far, alf, file = "data/favorites.RData")
 save(us, file = "data/french_users.RData")
 save(so, ar, file = "data/songs_artists.RData")
 save(st, file = "data/streams.RData")
+
+
+###### Autres scripts de codage ######
+
+## Produire le fichier des genres:
+source("scripts/genres_codage.R")

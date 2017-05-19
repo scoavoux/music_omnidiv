@@ -2,6 +2,8 @@
 
 # Reproducible way to unzip all data. Takes forever.
 # expect bzip2 warnings "Can't guess original name for temp"
+# author: Samuel Coavoux
+# date: april 2017
 
 tar -xf DataSet_D_Orange.tar
 cd orange

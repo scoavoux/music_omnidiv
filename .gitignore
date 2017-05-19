@@ -12,3 +12,4 @@ data_2013.zip
 code_sisley/
 *.todo
 journal.md
+*_cache

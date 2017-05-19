@@ -1,0 +1,204 @@
+---
+title: "Diversité algorithmique et éclectisme. Description de la méthode d'enquête"
+author: "Samuel Coavoux"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = FALSE,
+               message = FALSE,
+               error = FALSE,
+               warning = FALSE,
+               cache = TRUE,
+               root.dir = normalizePath(".."))
+
+opts_hooks$set(inline = function (x) {
+  if(is.numeric(x) & !is.integer(x)) 
+    x = round_digits(x)
+  else if(is.integer(x))
+    x = formatC(x, big.mark = " ", format = "d")
+  paste(as.character(x), collapse = ", ")
+}
+)
+library(tidyverse)
+library(questionr)
+
+```
+
+Ce document présente la méthode suivie pour analyser les données de Deezer et doit servir à la fois de journal d'enquête et de source pour les parties méthodologie de la valorisation de la recherche.
+
+# Données
+
+Elles ont été fournies par Deezer et représentent des historiques.
+
+## Données brutes
+
+### Premier set (non utilisé)
+
+Un premier set de données a été finalement abandonné à cause de problèmes de timestamp. Il était issu d'un dump assez basique produit par Deezer : une extraction des streams de 10000 users pendants 5 jours (du 01/01/2013 au 05/01/2013). Il existe encore dans le dossier `./base`. On y trouve: 
+
++ `DataSet_D_Orange.tar`: le zip contenant les données
++ `prepare.sh`: un script bash pour dézipper le fichier.
+
+Un début de script d'importation a été écrit avant que la base soit abandonnée: `./scripts/old_data_import.R`.
+
+### Second set
+
+Le second set est issu d'une récupération plus ciblée des données. Il s'agit de l'ensemble des écoutes de 4000 utilisateurs tirés aléatoirement parmi l'ensemble des utilisateurs ayant utilisés le service durant la première semaine d'avril 2014. Ils sont suivis du 01/04/2014 au 31/08/2014, soit 5 mois.
+
+```{r helper_functions_import}
+
+count_lines <- function(file, orig = "../data/orig/", ext=".tsv"){
+  com <- paste0("wc -l < ", orig, file, ext)
+  
+  paste(formatC(as.integer(system(com, intern = TRUE)), big.mark = " ", format = "d"), "lignes")
+}
+
+```
+
+
+Les données sont disponibles dans `./data/orig` au format tab separated. On y trouve:
+
+Données effectivement utilisées pour le moment:
+
++ `artist_catalog.tsv`: `r count_lines("artist_catalog")`, chaque ligne représente un artiste. Seulement les artistes écoutés. Variables:
+    - `art_id`: identifiant unique de l'artiste (integer)
+    - `art_name`: nom de l'artiste (character)
+    - `rank_arstist`: rang de l'artiste, interne deezer (integer)
+    - `artist_fans`: nombre de "fans" sur Deezer à date inconnue (integer)
++ `song_catalog.tsv`: `r count_lines("song_catalog")`, chaque ligne représente une chanson. Seulement les chansons écoutés (catalogue total est de 30M de pistes environ). Variables:
+    - `sng_id`: identifiant unique de la piste (integer)
+    - `art_id`: identifiant unique de l'artiste (integer)
+    - `alb_id`: identifiant unique de l'album (integer)
+    - `label_id`: identifiant unique du label (integer), inemployé pour le moment
+    - `digital_release`: date de sortie au format numérique (date au format YYYY-MM-DD)
+    - `physical_release`: date de sortie de l'album (date au format YYYY-MM-DD)
+    - `sng_title`: titre de la piste (character)
+    - `duration`: durée de la piste en secondes (integer)
++ `stream.tsv`: `r count_lines("stream")`. Une ligne par écoute. Variables:
+    - `user_id`: identifiant unique de l'utilisateur (integer)
+    - `sng_id`: identifiant unique de la piste (integer)
+    - `type_stream`: documenté comme "0 : MOD;  1 : smartradio;  2 : radio" ; pas utilisé, ne sait pas à quoi cela correspond (integer)
+    - `country`: géolocalisation de l'écoute, niveau Pays. Quasi-uniquement la France (character).
+    - `length`: durée de l'écoute (integer). Souvent négatif, sans que ce que cela signifie soit clair
+    - `context_name`: dispositif qui a abouti à l'écoute (par exemple: via les favoris, via une radio, etc.). 48 modalités (character)
+    - `context_id`: identifiant à partir duquel a été construit context_name? Signification n'est pas clair, et la variable n'est pas documentée;
+    - `app_id`: OS utilisé pour la connexion au service ? 14 modalités. Pas clair.
+    - `app_type`: application utilisée pour l'écoute, 4 modalités seulement : "desktop" "mobile"  "tablet"  "web" (character). Ne correspond pas à une simple aggrégation des modalités de `app_id`.
+    - `offer_id`: type d'abonnement (integer) ; 0: Free ; 1: Premium ; 2: Premium + ; Autres : premium + partenaires Telco (dont Orange)
+    - `timestamp_off`: si écoute offline, date de synchronisation (unix timestamp); 
+    - `timestamp_sync`: ??? (unix timestamp);
+    - `pause`: nombre de pauses durant l'écoute?
+    - `seek`: ???
+    - `timestamp`: date d'écoute (unix timestamp)
++ `orange_user_detail.tsv`: `r count_lines("orange_user_detail")`. Une ligne = un utilisateur inscrit.
+    - `user_id`: identifiant unique de l'utilisateur (integer)
+    - `sex`: sexe de l'utilisateur (character). modalités: F, M
+    - `city`: ville de l'utilisateur (character)
+    - `birth`: date de naissance de l'utilisateur (YYYY-MM-DD)
+    - `subscription_date`: date d'abonnement/création du compte? de l'utilisateur (YYYY-MM-DD)
++ `album_fav.tsv`: `r count_lines("album_fav")`.
++ `fav_albums.tsv`: `r count_lines("fav_albums")`. 
+    - `user_id`: identifiant unique de l'utilisateur (integer)
+    - `alb_id`: identifiant unique de l'album (integer)
+    - `add`: ajout ou retrait des favoris (1 pour ajout, 0 pour retrait)
+    - `timestamp_favalbum`: date de l'ajout/retrait (unix timestamp)
++ `fav_artists.tsv`: `r count_lines("fav_artists")`
+    - `user_id`: identifiant unique de l'utilisateur (integer)
+    - `art_id`: identifiant unique de l'artiste (integer)
+    - `add`: ajout ou retrait des favoris (1 pour ajout, 0 pour retrait)
+    - `timestamp_favalbum`: date de l'ajout/retrait (unix timestamp)
++ `fav_songs.tsv`: `r count_lines("fav_songs")`
+    - `user_id`: identifiant unique de l'utilisateur (integer)
+    - `V2`: ????
+    - `sng_id`: identifiant unique de l'album (integer)
+    - `timestamp_favalbum`: date de l'ajout comme favori (unix timestamp)
+
+Résidus, souvent d'autres versions des fichiers ci-dessus:
+
++ `users.tsv` 
++ `orange_extract_detail.tsv`
+
+### Données de genres
+
+Le script `scripts/genre_scraping.R` contient les instructions pour récupérer sur l'API de Deezer les genres associés à chacun des albums de la base de données. Il produit le fichier `data/genres_raw.RData` (une liste avec les réponses de l'API pour chaque album). Le scraping a été réalisé le 9-10 mai 2017.
+
+## Import de données
+
+Le script `scripts/import.R` contient les instructions nécessaires pour produire un jeu de données propres et recodées. Il génère un ensemble de fichiers `.RData` dans le répertoire `data`. Noter que la variable `NMAX` permet de spécifier le nombre de lignes de `streams.tsv` à importer, afin de limiter les demandes en CPU et RAM lors des analyses exploratoires (par défaut, seules les 100 000 premières lignes sont importées).
+
+## Recodages
+
+### Données de base
+
+Le script `scripts/import.R` contient également les recodages des bases streams, users, songs, artists, albums. Ils sont issus pour la plupart du code de Sisley.
+
+Nous avons changé par rapport à sa thèse la définition de la popularité des artistes en délimitant les *stars* plus précisément (les 0.1%, les 100 premiers artistes, plutôt que les 600 premiers).
+
+### Données de genre
+
+Le script `scripts/genres_codage.R` prend en entrée les résultats bruts des interrogations de l'API et en sort une base de données des albums auxquels est associé un genre unique par album. Il procède d'abord par élimination/regroupement, pour passer de 91 à 20 genres, puis par définition de priorités de genres, afin de réduire les albums multiclassés jusqu'à ce que l'on obtienne plus qu'un genre par album (au départ, environ 1/3 d'albums ont plusieurs genres, et ils peuvent avoir beaucoup de genres différents).
+
+```{r genres_load}
+load("../data/genres_raw.RData")
+load("../data/songs_artists.RData")
+genres <- bind_rows(l)
+```
+
+Le scraping a porté sur `r length(l)` albums; il y a des erreurs (album non trouvé dans la base) pour `r sum(sapply(l, is.null))` d'entre eux. Le scraping a été fait à partir des identifiants d'albums présents dans la base de données.
+
+```{r, ngnr}
+genres <- group_by(genres, alb_id) %>% 
+  mutate(ngnr = n()) %>% 
+  ungroup()
+df <- select(genres, alb_id, name) %>% 
+  filter(!is.na(name)) %>% 
+  mutate(x=1) %>% 
+  spread(name, x, fill = 0)
+
+```
+
+Pour les `r length(unique(genres$alb_id))` albums qui ont été trouvés, on recense `r sum(is.na(genres$name))` n'ayant aucun genres. Les autres ont entre 1 et `r max(genres$ngnr)` genres différents (en moyenne `r mean((distinct(genres, alb_id, .keep_all = TRUE) %>% filter(!is.na(name)))$ngnr)`).
+
+Il y a alors `r length(unique(genres$name)) -1` genres différents.
+
+```{r}
+tb <- colSums(df[-1]) %>% 
+  data.frame(n = .) %>% 
+  rownames_to_column() %>%
+  arrange(desc(n)) %>% 
+  mutate(f = round(n / sum(n) * 100, 2),
+         freq_cum = cumsum(f)) %>% 
+  rename(Genre = rowname)
+
+kable(tb, caption = "Distribution des genres (dépasse le nombre total d'album car ils peuvent en avoir plusieurs)")
+
+```
+
+Après recodage et agrégation, on passe à un genre par album.
+
+```{r}
+load("../data/genres.RData")
+freq(genres$name) %>% kable(caption = "Tri à plat des genres après recodage")
+```
+
+# Analyses
+
+## Réplication des résultats de la thèse de Sisley Maillard
+
+Le document `analyses/these_s_maillard.Rmd` entreprend de reproduire les résultats présentés dans le chapitre 6 de la thèse.
+
+# Misc/travaux en cours
+
+## scripts/import_datable.R
+
+Première tentative de reproduire le script import en utilisant data.table plutôt que le tidyverse.
+
+## scripts/classifier_genres.R
+
+knn, PCA, etc. différentes solutions pour essayer de produire des clusters d'albums à l'intérieur d'un même genre, à partir des co-écoutes.
+
+## scripts/localisation.R
+
+Première tentative produire des données socio-démographique au niveau écologique à partir de la ville de localisation.

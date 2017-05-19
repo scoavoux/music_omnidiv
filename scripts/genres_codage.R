@@ -1,3 +1,5 @@
+# author: Samuel Coavoux
+# date: mai 2017
 # Ce script prend en entrée les genres au format brut, 
 # tels que produit par le script genre_scraping.R, 
 # et ressort une base donnant un genre unique par album

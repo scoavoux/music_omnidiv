@@ -1,3 +1,6 @@
+# author: Samuel Coavoux
+# date: april 2017
+
 ###### Librairies ######
 library(tidyverse)
 library(lubridate)
