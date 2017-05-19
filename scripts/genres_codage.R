@@ -16,11 +16,7 @@ library(tidyverse)
 load("data/genres_raw.RData")
 
 genres <- bind_rows(l) %>% tbl_df()
-## ATTENTION: filtrage des NA est temporaire ; on en aura besoin par la suite pour 
-## les autres informations que les genres présents dans la base
-## => PB: certaines des commandes ci-dessous les suppriment 
-## (especially les !(name %in%), !(name ==))
-## ajouter un "| is.na(name)" à chaque ligne?
+rm(i, l)
 genres <- select(genres, -picture, -type, -id) %>% 
   group_by(alb_id) %>% 
   mutate(ngnr = n()) %>% 
@@ -138,10 +134,12 @@ genres_order <- c("Jeunesse", "Comédies musicales", "Chanson française", "Meta
                     "Reggae", "Classique", "Rap/Hip Hop", "Dance", "Electro", "Alternative", 
                   "Rock", "Pop", "Films/Jeux vidéo")
 
-gnr <- mutate(genres, name = factor(name, levels = genres_order)) %>% 
+genres <- mutate(genres, name = factor(name, levels = genres_order)) %>% 
   group_by(alb_id) %>% 
   arrange(name) %>% 
   slice(1) %>% 
   select(-ngnr)
+
+rm(genres_order)
 
 save(genres, file = "data/genres.RData")

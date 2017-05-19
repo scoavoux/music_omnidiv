@@ -8,6 +8,11 @@
 library(tidyverse)
 library(lubridate)
 
+###### Genres ######
+## Produire le fichier des genres:
+# source("scripts/genres_codage.R")
+load("data/genres.RData")
+
 ###### Songs ######
 
 so <- read_tsv("data/orig/song_catalog.tsv", 
@@ -132,6 +137,9 @@ gc()
 
 ###### Users ######
 
+# source("scripts/localisation.R")
+load("data/cities.RData")
+
 us <- read_tsv("data/orig/orange_user_detail.tsv", 
                col_names = c("user_id", "date_birth", "gender", "date_registered", "city"), 
                col_types = "ccccc")
@@ -145,6 +153,10 @@ us <- mutate_at(us, .cols = vars(starts_with("date_")), .funs = funs(ifelse(. ==
   ## Corriger les types de vecteur
   mutate(gender = factor(gender))
 
+us <- mutate(us, city = tolower(city) %>% chartr("éèêëàâäîïùûüôöç ", 
+                                                 "eeeeaaaiiuuuooc-", 
+                                                 .) %>% str_trim()) %>% 
+  left_join(select(cities, origname, revenu_median, population), by = c("city" = "origname"))
 
 
 ###### Fav songs ######
@@ -292,7 +304,3 @@ save(so, ar, file = "data/songs_artists.RData")
 save(st, file = "data/streams.RData")
 
 
-###### Autres scripts de codage ######
-
-## Produire le fichier des genres:
-source("scripts/genres_codage.R")
