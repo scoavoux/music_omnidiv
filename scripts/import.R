@@ -282,6 +282,10 @@ st <- mutate(st,
              yday = yday(timestamp),
              hour = hour(timestamp))
 
+## Genres
+st <- left_join(st, select(so, alb_id, sng_id), by = "sng_id") %>% 
+  left_join(select(genres, genre = name, alb_id), by = "alb_id")
+
 ###### Fav albums ######
 fal <- read_tsv("data/orig/fav_albums.tsv",
                 col_names = c("user_id", "alb_id", "add", "timestamp_favalbum"))
