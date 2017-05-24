@@ -7,6 +7,7 @@
 ###### Packages ######
 library(tidyverse)
 library(lubridate)
+library(stringr)
 
 ###### Genres ######
 ## Produire le fichier des genres:
@@ -34,7 +35,7 @@ ar <- read_tsv("data/orig/artist_catalog.tsv",
 
 
 ###### Streams ######
-if(!exists("NMAX")) NMAX <- 1e6
+if(!exists("NMAX")) NMAX <- Inf
 
 st <- read_tsv("data/orig/stream.tsv", 
                col_names = c("user_id", "sng_id", "type_stream", "country", "length", "context_name", "context_id", 
@@ -43,6 +44,8 @@ st <- read_tsv("data/orig/stream.tsv",
                , n_max = NMAX
                )
 
+## Supprimer un certain nombre de variables inutilisées
+st <- select(st, -type_stream, -country, -context_id, -app_id, -timestamp_off, -timestamp_sync, -pause, -seek)
 
 ## Note: Code de Sisley ne documente pas comment elle a fait.
 ## Simplement, elle supprime certaines personnes par leur index
@@ -54,6 +57,18 @@ u <- group_by(st, user_id) %>%
 
 # ggplot(u, aes(x = n)) + geom_histogram() + scale_x_log10()
 # ggplot(u, aes(x = t)) + geom_histogram() + scale_x_log10()
+
+## Temps d'écoute
+
+## Vérifier que longueur moindre que longueur de la piste
+## + ajouter année de diffusion
+st <- select(so, sng_id, art_id, duration) %>% 
+  right_join(st, by = "sng_id") %>% 
+  mutate(length = ifelse(length > duration, duration, length))
+
+# 5% de durée d'écoute négative... NA?
+# sum(st$length < 0) / nrow(st)
+st$length[st$length < 0] <- NA
 
 ## Supprimer sur la base ci-dessus (plus de 40000 tracks ou plus de 100h d'écoutes cumulées)
 st <- anti_join(st, filter(u, n > 4e04 | t > 1e02), by = "user_id")
@@ -87,17 +102,7 @@ st <- mutate(st,
 #                                           TRUE ~ NA_character_) %>% factor())
 
 
-## Temps d'écoute
 
-## Vérifier que longueur moindre que longueur de la piste
-## + ajouter année de diffusion
-st <- select(so, sng_id, art_id, duration) %>% 
-  right_join(st, by = "sng_id") %>% 
-  mutate(length = ifelse(length > duration, duration, length))
-
-# 5% de durée d'écoute négative... NA?
-# sum(st$length < 0) / nrow(st)
-st$length[st$length < 0] <- NA
 
 ## Définition des "stars"
 ### Après discussion avec JS le 11 mai 2017
@@ -181,11 +186,7 @@ us <- count(fs, user_id) %>%
 ## + favori
 
 st <- left_join(st, fs, by = c("user_id", "sng_id")) %>% 
-  mutate(fav_song = factor(case_when(is.na(.$timestamp_favsong) ~ "Not favorite",
-                                .$timestamp_favsong <= .$timestamp ~ "Favorite",
-                                .$timestamp_favsong > .$timestamp ~ "Not yet favorite"),
-                      levels = c("Not favorite", "Not yet favorite", "Favorite")))
-
+  mutate(fav_song = factor(ifelse(timestamp_favsong <= timestamp & !is.na(timestamp_favsong), "Favorite", "Not favorite")))
 
 ###### Fav artists ######
 far <- read_tsv("data/orig/fav_artists.tsv",
@@ -196,26 +197,39 @@ us <- filter(far, add == 1) %>%
   count(user_id) %>% 
   rename(nb_fav_artists = n) %>% 
   right_join(us, by = "user_id")
-
 st <- select(so, sng_id, nouveaute) %>% 
   right_join(st, by = "sng_id") %>% 
-  left_join(filter(far, add == 1) %>% select(-add)) %>% 
-  mutate(fav_artist = factor(case_when(is.na(.$timestamp_favartist) ~ "Not favorite",
-                                     .$timestamp_favartist <= .$timestamp ~ "Favorite",
-                                     .$timestamp_favartist > .$timestamp ~ "Not yet favorite"),
-                           levels = c("Not favorite", "Not yet favorite", "Favorite")))
+  left_join(filter(far, add == 1) %>% 
+              select(-add) %>% 
+              group_by(user_id, art_id) %>% 
+              mutate(timestamp_favartist = min(timestamp_favartist)) %>% 
+              ungroup() %>% 
+              distinct()
+            ) %>% 
+  mutate(fav_artist = factor(ifelse(timestamp_favartist <= timestamp & !is.na(timestamp_favartist), "Favorite", "Not favorite"))) %>% 
+  group_by(user_id, art_id) %>% 
+  mutate(fav_artist_other_song = factor(ifelse(any(fav_artist == "Favorite"), min(timestamp), 9999999999) <= timestamp, 
+                                        levels = c(TRUE, FALSE), 
+                                        labels = c("Favorite", "Not favorite")))
 
-## Idem pour aimer une autre chanson de l'artiste
-## 
-## 
-# st <- select(so, sng_id, art_id) %>% 
-#   right_join(st, by = "sng_id") %>% 
-#   group_by(user_id, art_id) %>% 
-#   mutate(fav_artist_other_song = factor(case_when(any(.$fav == "Favorite") ~ "Favorite",
-#                                                   any(.$fav == "Not yet favorite") ~ "Not yet favorite",
-#                                                   any(.$fav == "Not favorite") ~ "Not favorite"), 
-#                                         levels = c("Not favorite", "Not yet favorite", "Favorite")))
-
+###### Fav albums ######
+fal <- read_tsv("data/orig/fav_albums.tsv",
+                col_names = c("user_id", "alb_id", "add", "timestamp_favalbum"))
+# sts <- st
+st <- select(so, sng_id, alb_id) %>% 
+  right_join(st, by = "sng_id") %>% 
+  left_join(filter(fal, add == 1) %>% 
+              select(-add) %>% 
+              group_by(user_id, alb_id) %>% 
+              mutate(timestamp_favalbum = min(timestamp_favalbum)) %>% 
+              ungroup() %>% 
+              distinct()
+  ) %>% 
+  mutate(fav_album = factor(ifelse(timestamp_favalbum <= timestamp & !is.na(timestamp_favalbum), "Favorite", "Not favorite"))) %>% 
+  group_by(user_id, alb_id) %>% 
+  mutate(fav_album_other_song = factor(ifelse(any(fav_album == "Favorite"), min(timestamp), 9999999999) <= timestamp, 
+                                        levels = c(TRUE, FALSE), 
+                                        labels = c("Favorite", "Not favorite")))
 
 context_cat_dic <- c( "tops_album" = "top",
                       "tops_playlist" = "top",
@@ -266,43 +280,41 @@ context_cat_dic <- c( "tops_album" = "top",
                       "explore_picks_album" = "experts_editor",
                       "explore_region_album" = "experts_editor")
 
-st <- st %>% mutate(context_name = ifelse(fav_artist == "Favorite" | fav_song == "Favorite",
+st <- st %>% mutate(context_name = ifelse(fav_song == "Favorite" |
+                                            fav_artist == "Favorite" |
+                                            fav_artist_other_song == "Favorite" |
+                                            fav_album == "Favorite" |
+                                            fav_album_other_song  == "Favorite",
                                           "favorite",
                                           context_name))
+st <- select(st, -starts_with("timestamp_fav"), -starts_with("fav"))
+gc()
 st$context_cat <- factor(context_cat_dic[st$context_name])
 
-# context_cat= ifelse(context_cat   %in% c("feed_smartradio", "feed_radio", "feed_album", "feed_playlist", "feed_track"), "perso", context_cat)
-# context_cat= ifelse(context_cat   %in% c("radio_editoriale", "smartradio", "radio_flow"), "radios", context_cat)
-# context_cat= ifelse(context_cat   %in% c("artist_disco", "artist_top"), "contextuel", context_cat)
-
 ## Temporalité de l'écoute
-st <- mutate(st, 
-             week = week(timestamp),
-             wday = lubridate::wday(timestamp, label = TRUE),
-             yday = yday(timestamp),
-             hour = hour(timestamp))
+# st <- mutate(st, 
+#              week = week(timestamp),
+#              wday = lubridate::wday(timestamp, label = TRUE),
+#              yday = yday(timestamp),
+#              hour = hour(timestamp))
 
 ## Genres
 st <- left_join(st, select(so, alb_id, sng_id), by = "sng_id") %>% 
   left_join(select(genres, genre = name, alb_id), by = "alb_id")
 
 ###### Fav albums ######
-fal <- read_tsv("data/orig/fav_albums.tsv",
-                col_names = c("user_id", "alb_id", "add", "timestamp_favalbum"))
 
-###### Fav albums ######
-
-alf <- read_tsv("data/orig/album_fav.tsv", 
-                col_names = c("alb_id", "art_id", "label_id", "digital_release",
-                              "physical_release", "alb_title", "rank", "nb_fans"))
+# alf <- read_tsv("data/orig/album_fav.tsv", 
+#                 col_names = c("alb_id", "art_id", "label_id", "digital_release",
+#                               "physical_release", "alb_title", "rank", "nb_fans"))
 
 
 ###### Clean-up  ######
 ## Remove some unused variable so that knitting becomes possible
-st <- select(st, -duration, -type_stream, -country, -context_id, -app_id, -timestamp_off, -timestamp_sync, -pause, -seek)
+st <- select(st, -duration)
 gc()
 
-save(fs, fal, far, alf, file = "data/favorites.RData")
+save(fs, fal, far, file = "data/favorites.RData")
 save(us, file = "data/french_users.RData")
 save(so, ar, file = "data/songs_artists.RData")
 save(st, file = "data/streams.RData")
