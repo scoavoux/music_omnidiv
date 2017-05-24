@@ -4,16 +4,18 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE,
-                      warning = FALSE,
-                      error = FALSE,
-                      message = FALSE)
+library(knitr)
+opts_chunk$set(echo = FALSE,
+               warning = FALSE,
+               error = FALSE,
+               message = FALSE,
+               root.dir = normalizePath(".."))
 ```
 
 ```{r data}
-load("data/streams.RData")
-load("data/french_users.RData")
-load("data/songs_artists.RData")
+load("../data/streams.RData")
+load("../data/french_users.RData")
+load("../data/songs_artists.RData")
 ```
 
 Ce document comporte une réplication des analyses du chapitre 6 de la thèse de Sisley Maillard

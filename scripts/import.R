@@ -210,7 +210,8 @@ st <- select(so, sng_id, nouveaute) %>%
   group_by(user_id, art_id) %>% 
   mutate(fav_artist_other_song = factor(ifelse(any(fav_artist == "Favorite"), min(timestamp), 9999999999) <= timestamp, 
                                         levels = c(TRUE, FALSE), 
-                                        labels = c("Favorite", "Not favorite")))
+                                        labels = c("Favorite", "Not favorite"))) %>% 
+  ungroup()
 
 ###### Fav albums ######
 fal <- read_tsv("data/orig/fav_albums.tsv",
@@ -229,7 +230,8 @@ st <- select(so, sng_id, alb_id) %>%
   group_by(user_id, alb_id) %>% 
   mutate(fav_album_other_song = factor(ifelse(any(fav_album == "Favorite"), min(timestamp), 9999999999) <= timestamp, 
                                         levels = c(TRUE, FALSE), 
-                                        labels = c("Favorite", "Not favorite")))
+                                        labels = c("Favorite", "Not favorite"))) %>% 
+  ungroup()
 
 context_cat_dic <- c( "tops_album" = "top",
                       "tops_playlist" = "top",
@@ -299,8 +301,7 @@ st$context_cat <- factor(context_cat_dic[st$context_name])
 #              hour = hour(timestamp))
 
 ## Genres
-st <- left_join(st, select(so, alb_id, sng_id), by = "sng_id") %>% 
-  left_join(select(genres, genre = name, alb_id), by = "alb_id")
+st <- left_join(st, select(genres, genre = name, alb_id), by = "alb_id")
 
 ###### Fav albums ######
 
