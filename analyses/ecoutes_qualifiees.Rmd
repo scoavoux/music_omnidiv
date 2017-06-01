@@ -1,0 +1,222 @@
+---
+title: "Dispositifs d'écoute"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE, 
+               error = FALSE, 
+               echo = FALSE, 
+               warning = FALSE, 
+               results = 'asis')
+opts_knit$set(root.dir = normalizePath(".."))
+
+```
+
+```{r data}
+library(tidyverse)
+library(questionr)
+library(lubridate)
+library(censReg)
+library(randomForest)
+library(FactoMineR)
+library(stargazer)
+
+theme_set(theme_bw())
+
+load("data/streams.RData")
+load("data/french_users.RData")
+
+```
+
+
+
+# Analyse de la part d'écoutes guidées
+
+```{r recodage_ecoutes_guidées}
+
+st <- filter(st, !(context_cat %in% c("ND", "unknown")), !is.na(context_cat)) %>% 
+               mutate(guid = ifelse(context_cat %in% c("stock", "search", "artist_disco"), # que faire de artist_top
+                                    "Non guidée",
+                                    "Guidée") %>% 
+                        factor(),
+                      context_cat = droplevels(context_cat)) 
+
+us <- group_by(st, user_id) %>% 
+  summarise(nb_ecoutes = n(),
+            nb_guid = sum(guid == "Guidée"),
+            fq = sum(guid == "Guidée") / nb_ecoutes,
+            nb_artists = n_distinct(art_id), 
+            freq_mobile = sum(app_type == "mobile", na.rm = TRUE)/n(),
+            freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / n(),
+            nb_dispositifs = n_distinct(context_cat), 
+            freq_star_sng = sum(sng_pop == "Star", na.rm = TRUE) / n(),
+            freq_star_art = sum(art_pop == "Star", na.rm = TRUE) / n(),
+            freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
+  full_join(us)
+
+
+## Enlever les très très gros usagers
+us <- filter(us, nb_ecoutes < 10000, !is.na(nb_ecoutes))
+
+## Ajouter temps depuis l'inscription
+us <- mutate(us, experience = 2014 - year(date_registered))
+
+```
+
+On calcule la part des écoutes guidées dans les écoutes totales. Ce calcul ignore les écoutes dont le contexte est inconnu, soit plus de la moitié d'entre elles. La proportion d'écoutes guidées est donc définie comme:
+
+$$\frac{N_{écoutes\ guidées}}{N_{écoutes\ guidées} + N_{écoutes\ non\ guidées}}$$
+
+Il est possible que cette proportion soit surestimée dans la mesure où les écoutes ignorées ne sont sans doute pas réparties au hasard entre guidée et non guidée. Cependant, on s'intéresse avant tout à la dispersion de cette variable.
+
+## Distribution de la part d'écoutes guidées
+
+Lorsque l'on considère les *écoutes* et non les personnes, écoutes guidées et non guidées semblent équitablement réparties (pour celles que l'on peut déterminer).
+
+```{r freq_st_guid, }
+freq(st$guid) %>% kable(caption = "Distribution des écoutes par usage de dispositif")
+```
+
+Cependant, ça n'est pas le cas de la variable part d'écoutes guidées, qui est très inégalement distribuée dans la population. Elle a une moyenne de `r mean(us$fq, na.rm=TRUE)`, une médiane de `r median(us$fq, na.rm=TRUE)` et un écart-type de `r sd(us$fq, na.rm=TRUE)`.
+
+```{r density_fq, fig.cap = "Densité de la proportion d'écoutes guidées par usager"}
+ggplot(us, aes(fq)) +
+  geom_line(stat = "density") +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 3)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(x = "Proportion d'écoutes guidées", y = "Densité")
+
+```
+
+
+```{r boxplot_guid, fig.cap = "Distribution de la proportion d'écoutes guidées par usager"}
+ggplot(us, aes(1, fq)) +
+  geom_boxplot(notch = TRUE, size = 0.5) +
+  xlim(0, 2) +
+  labs(y = "Part d'écoutes guidées", x = "") +
+  ## BUG de ggplot? En tous cas, on remplace *.x par *.y dans theme()
+  ## à cause du coord_flip
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  coord_flip()
+```
+
+
+## Lien entre écoutes guidées et propriétés socio-démographiques des usagers
+
+```{r scatterplot_fq_socdem, fig.cap="Part d'écoutes guidées par caractéristiques socio-démographiques"}
+select(us,  fq, age, experience, revenu_median, population) %>% 
+  gather(key, value, -fq) %>% 
+  filter(!is.na(value)) %>% 
+  ggplot(aes(x = fq, y = value)) +
+    facet_wrap(~key, scales="free") +
+    geom_point() +
+    geom_smooth() +
+    labs(x = "Part d'écoutes guidées")
+```
+
+```{r boxplot_fq_gender, fig.cap = "Part d'écoutes guidées par sexe"}
+filter(us, !is.na(gender)) %>% 
+  ggplot(aes(gender, fq)) +
+  geom_boxplot(notch = TRUE) +
+    labs(y = "Part d'écoutes guidées")
+```
+
+
+## Lien entre part d'écoutes guidées et caractéristiques des usagers
+
+```{r scatter_fq_carac_usagers, fig.cap = "Part d'écoutes guidées par caractéristiques d'usages"}
+select(us,  fq, nb_ecoutes, nb_artists, freq_mobile, freq_radio,
+       nb_dispositifs, freq_star_sng, freq_star_art, nb_fav_artists, nb_favorites) %>% 
+  gather(key, value, -fq) %>% 
+  group_by(key) %>% 
+  filter(!is.na(value)) %>% 
+  mutate(value = ifelse(value < quantile(value, .05) | value > quantile(value, .95), 
+                        NA, 
+                        value)) %>% 
+  filter(!is.na(value)) %>% 
+  ggplot(aes(x = fq, y = value)) +
+    facet_wrap(~key, scales="free") +
+    geom_point() +
+    geom_smooth() +
+    labs(x = "Part d'écoutes guidées")
+```
+
+## Lien entre part d'écoutes guidées et genres écoutés
+
+```{r genre_init}
+df <- count(st, user_id, genre) %>% 
+  filter(!is.na(genre)) %>% 
+  group_by(user_id) %>% 
+  mutate(n = n/sum(n)) %>% 
+  spread(genre, n, fill = 0) %>% 
+  right_join(select(us, fq, user_id)) %>% 
+  ungroup()
+
+```
+
+```{r scatter_fq_genres, fig.cap = "Part d'écoutes guidées par part de chaque genre dans la consommation totale"}
+select(df, -user_id) %>% 
+  gather(key, value, -fq) %>% 
+  ggplot(aes(fq, value)) +
+    facet_wrap(~key) +
+    geom_point(size=1) +
+    geom_smooth() +
+    labs(x = "Part d'écoutes guidées")
+  
+```
+
+## Régression
+
+<!-- 
+Proportion is a censored variable (0 to 1) => tobit model
+censReg provides such models
+-->
+
+```{r fq_tobit}
+reg <- censReg(fq ~ gender + age + experience + nb_ecoutes + nb_artists, left = 0, right = 1, data = us)
+stargazer(reg, type = "html")
+
+```
+
+# Rythme des écoutes guidées
+
+```{r init_datetime_variables}
+st <- mutate(st, wday = lubridate::wday(timestamp, label = TRUE),
+                 hour = hour(timestamp))
+```
+
+```{r}
+group_by(st, wday, hour) %>% 
+  summarize(g = sum(guid == "Guidée")/n()) %>% 
+  ggplot(aes(x = hour, y = g, color = wday)) +
+  geom_line() +
+  geom_point()
+```
+
+
+# Analyse multivariée des dispositifs de recommandation
+
+## Association entre dispositifs
+
+```{r corr_matrix, fig.cap = "Matrice des corrélation entre dispositifs"}
+df <- count(st, user_id, context_cat) %>% 
+  filter(!is.na(context_cat), !(context_cat %in% c("stock", "search", "artist_disco"))) %>% 
+  spread(context_cat, n, fill = 0)
+
+source("https://raw.githubusercontent.com/briatte/ggcorr/master/ggcorr.R")
+ggcorr(df[, -1], nbreaks = 5)
+
+```
+
+```{r pca_dispositifs, eval = FALSE}
+dpca <- PCA(df[, -1], graph = FALSE)  
+# plot(dpca$eig$`percentage of variance`)
+```
+
+
+```{r pca_varplot, eval = FALSE}
+plot.PCA(dpca, choix = "var")
+```
+
