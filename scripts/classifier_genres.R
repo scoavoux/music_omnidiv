@@ -3,6 +3,29 @@ load("data/songs_artists.RData")
 load("data/genres.RData")
 
 library(tidyverse)
+library(knitr)
+library(FactoMineR)
+
+###### Classifier les genres ######
+
+# Etudier l'association entre les genres à partir des co-écoutes
+# genres sont liés si mêmes personnes écoutent les deux
+# NMAX <- Inf
+source("scripts/import.R")
+
+df <- count(st, user_id, genre) %>% 
+  filter(!is.na(genre)) %>% 
+  group_by(user_id) %>% 
+  mutate(n = n/sum(n)) %>% 
+  spread(genre, n, fill = 0)
+  
+gpca <- PCA(df[, -1], graph = FALSE)
+plot(gpca, choix = "var")
+ghc <- HCPC(gpca, graph = FALSE)
+
+plot(ghc, choice = "tree")
+
+###### Classifier dans un genre ######
 
 ## Approche par les kmeans
 sol <- so[so$alb_id %in% filter(genres, name == "Alternative")$alb_id, ]
@@ -27,7 +50,7 @@ d <- data_frame(art_id = as.integer(artid), cluster = classif$cluster) %>%
   left_join(ar)
 
 freq(d$cluster)
-library(knitr)
+
 # à adapter; filter les plus fort cluster
 filter(d, cluster != 10) %>% arrange(cluster) %>% kable()
 

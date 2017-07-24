@@ -8,14 +8,15 @@ library(knitr)
 opts_chunk$set(echo = FALSE,
                warning = FALSE,
                error = FALSE,
-               message = FALSE,
-               root.dir = normalizePath(".."))
+               message = FALSE)
+
 ```
 
 ```{r data}
-load("../data/streams.RData")
-load("../data/french_users.RData")
-load("../data/songs_artists.RData")
+library(here)
+load(here("data", "streams.RData"))
+load(here("data", "french_users.RData"))
+load(here("data", "songs_artists.RData"))
 ```
 
 Ce document comporte une réplication des analyses du chapitre 6 de la thèse de Sisley Maillard
@@ -24,7 +25,6 @@ Ce document comporte une réplication des analyses du chapitre 6 de la thèse de
 library("tidyverse")
 library("lubridate")
 library("broom")
-library("knitr")
 library("questionr")
 
 # Options
@@ -167,7 +167,7 @@ freq(factor(st$length > 30, levels = c(FALSE, TRUE), labels = c("Moins de 30 sec
 group_by(st, sng_id) %>% 
   summarize(e = sum(length > 30)) %>% 
   filter(e > 0) %>% 
-  nrow() / n_distinct(st$sng_id)
+  nrow() / length(unique(st$sng_id))
 ```
 
 
@@ -209,16 +209,27 @@ count(st, art_id) %>%
 ### Saisonnalité des écoutes
 
 ```{r ecoutes_par_semaine, fig.cap = "Distribution des écoutes par semaine"}
+st <- mutate(st,
+             week = week(timestamp),
+             wday = lubridate::wday(timestamp, label = TRUE),
+             yday = yday(timestamp),
+             hour = hour(timestamp))
+
 ggplot(st, aes(x = week)) + 
   geom_point(stat = "count") +
-  geom_line(stat = "count")
+  geom_line(stat = "count") +
+  ylim(0, 1.5e06)
+## Changer ylim
 ```
 
 
 
 ```{r ecoutes_par_jour_heure, fig.cap = "Distribution des écoutes par heure et par jour"}
 ggplot(st, aes(x = hour, linetype = wday, colour = wday)) + 
-  geom_line(stat = "count")
+  geom_line(stat = "count") +
+  ylim(0, 175000)
+  
+## changer ylim
 ```
 
 ### Volume d'écoute totale
@@ -283,20 +294,13 @@ mutate(st, offer_id = ifelse(offer_id == "Free", "Gratuit", "Premium")) %>%
 ## Diversité de la consommation
 
 
-```{r artiste_solitaires, eval = FALSE}
+```{r artiste_solitaires}
 ## Artistes écoutés par un seul individu
 group_by(st, art_id) %>%
-  summarize(n = n_distinct(user_id),
+  summarize(n = length(unique(user_id)),
          sol = n == 1) %>%
   count(sol) %>% 
   kable(caption = "Artistes écoutés par un seul usager")
-  
-library(microbenchmark)
-microbenchmark(as.data.table(st)[, .((length(unique(user_id)) == 1)), by = art_id],
-               group_by(st, art_id) %>%
-                 summarize(n = n_distinct(user_id),
-                           sol = n == 1) %>%
-                 count(sol))
 ```
 
 
@@ -336,7 +340,7 @@ df <- group_by(st, user_id) %>%
             freq_mobile = sum(app_type == "mobile", na.rm = TRUE)/n(),
             freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / n(),
             nb_dispositifs = n_distinct(context_cat), 
-            freq_star = sum(sng_popularite == "Star", na.rm = TRUE) / n(),
+            freq_star = sum(sng_pop == "Star", na.rm = TRUE) / n(),
             freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
   right_join(us)
 ```
@@ -370,14 +374,14 @@ mutate(df, inscr = as.numeric(ymd("20140407") - date_registered)) %>%
 ## Popularité
 
 ```{r distribution_pop_artistes}
-ggplot(st, aes(x = art_popularite)) +
+ggplot(st, aes(x = art_pop)) +
   geom_bar()
 
 ```
 
 
 ```{r distribution_pop_songs}
-ggplot(st, aes(x = sng_popularite)) +
+ggplot(st, aes(x = sng_pop)) +
   geom_bar()
 ```
 
@@ -454,7 +458,7 @@ freq(stpf$context_cat, sort = "dec") %>%
 
 
 ```{r association_dispositif_popularite_premiereecoute}
-table(stpf$context_cat, stpf$art_popularite) %>% 
+table(stpf$context_cat, stpf$art_pop) %>% 
   lprop() %>% 
   kable(digits = 1, caption = "Association entre dispositif et popularité de l'artiste pour les premières écoutes")
 ```

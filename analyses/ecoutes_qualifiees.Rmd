@@ -65,7 +65,11 @@ us <- group_by(st, user_id) %>%
   full_join(us)
 
 ## Enlever les très très gros usagers
-us <- filter(us, nb_ecoutes < 10000, !is.na(nb_ecoutes))
+## ainsi que les très faibles usagers
+us <- filter(us, 
+             nb_ecoutes < 10000, 
+             nb_ecoutes > 200,
+             !is.na(nb_ecoutes))
 
 ## Ajouter temps depuis l'inscription
 us <- mutate(us, experience = 2014 - year(date_registered))
@@ -530,7 +534,52 @@ count(st, offer_id, type_guid) %>%
   ggplot(aes(offer_id, f)) + 
     geom_col() +
     theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
-    labs(y = "Part d'écoute guidées", x = "Popularité de l'artiste") +
+    labs(y = "Part d'écoute recommandées", x = "Popularité de l'artiste") +
     ylim(0, .8)
 
 ```
+
+
+## Durée d'écoute par guidage
+
+```{r, fig.cap = "Temps d'écoute par guidage"}
+ggplot(filter(st, length < 1000), aes(guid, length)) +
+  geom_boxplot(notch= TRUE) +
+  labs(x = "Guidage", y = "Temps d'écoute en secondes")
+```
+
+```{r, fig.cap = "Temps d'écoute par type de guidage"}
+ggplot(filter(st, length < 1000), aes(type_guid, length)) +
+  geom_boxplot(notch= TRUE) +
+  labs(x = "Type de guidage", y = "Temps d'écoute en secondes")
+```
+
+## Guidage par support d'écoute
+
+```{r}
+count(st, app_type, guid) %>% 
+  mutate(f = n / sum(n)) %>% 
+  ungroup() %>% 
+  filter(guid == "Guidée", !is.na(app_type)) %>% 
+  ggplot(aes(app_type, f)) + 
+    geom_col() +
+    theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
+    labs(y = "Part d'écoute guidées", x = "Support d'écoute") +
+    ylim(0, 0.5)
+```
+
+
+```{r}
+count(st, app_type, type_guid) %>% 
+  filter(type_guid != "Non guidée") %>% 
+  mutate(f = n / sum(n)) %>% 
+  ungroup() %>% 
+  filter(type_guid == "Guidage", !is.na(app_type)) %>% 
+  ggplot(aes(app_type, f)) + 
+    geom_col() +
+    theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
+    labs(y = "Part d'écoute recommandées (vs. flux)", x = "Support d'écoute") +
+    ylim(0, .8)
+
+```
+

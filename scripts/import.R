@@ -75,7 +75,7 @@ st <- anti_join(st, filter(u, n > 4e04 | t > 1e02), by = "user_id")
 rm(u)
 
 ## Enlever les écoutes avant le 1er avril 2014
-st <- filter(st, timestamp >= 1396310400 | is.na(timestamp))
+st <- filter(st, (timestamp >= 1396310400 & timestamp < 1420113600) | is.na(timestamp))
 
 # Mettre les données au bon format
 st <- mutate(st, 
