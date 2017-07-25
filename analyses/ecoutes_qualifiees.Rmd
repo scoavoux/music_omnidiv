@@ -22,6 +22,7 @@ library(censReg)
 library(randomForest)
 library(FactoMineR)
 library(stargazer)
+library(GGally)
 
 theme_set(theme_bw())
 
@@ -324,6 +325,91 @@ reg <- tobit(fg ~ gender + age + experience + nb_ecoutes + nb_artists, left = 0,
 reg <- betareg(fg ~ gender + age + experience + nb_ecoutes + nb_artists, data = filter(us, fg > 0 & fg < 1))
 plot(reg)
 zoib(fg ~ gender + age + experience + nb_ecoutes + nb_artists | 1, data = us)
+
+```
+
+# Analyse des "outsiders" : les gros usagers d'écoutes guidées
+
+```{r disciples_init}
+## NB: on considère seulement ceux qui ont écoutés plus de 100 pistes durant la période
+us$disciples <- us$fq > 0.8
+us$disciples[us$nb_ecoutes < 100] <- NA
+us$disciples <- factor(us$disciples)
+
+```
+
+```{r disciples_freq}
+freq(us$disciples)
+```
+
+```{r disciples_gender_freq}
+## Analyse systématique des variables correlées avec disciples ; on ne conserve que celles qui le semblent
+lprop(table(us$disciples, us$gender)) %>% kable()
+```
+
+```{r disciples_nbart_boxplot}
+## Différences dans le nombre d'artistes différents écoutés
+ggplot(us, aes(disciples, nb_artists)) + 
+  geom_boxplot(notch = TRUE)
+
+```
+
+```{r nbart_disciples_lm}
+## Mais est-elle du à écoutes totales? Il semble que non
+lm(nb_artists ~ nb_ecoutes + disciples, data=us) %>% stargazer(type = "html")
+```
+
+
+```{r disciples_fg_boxplot}
+ggplot(us, aes(disciples, fg)) + 
+  geom_boxplot(notch = TRUE)
+```
+
+```{r disciples_mobile_boxplot}
+ggplot(us, aes(disciples, freq_mobile)) + 
+  geom_boxplot()
+```
+
+```{r disciples_dispositifs_boxplot}
+ggplot(us, aes(disciples, nb_dispositifs)) + 
+  geom_boxplot(notch = TRUE)
+```
+
+```{r disciples_starart_boxplot}
+ggplot(us, aes(disciples, freq_star_art)) + 
+  geom_boxplot(notch = TRUE)
+```
+
+```{r disciples_starsng_boxplot}
+ggplot(us, aes(disciples, freq_star_sng)) + 
+  geom_boxplot(notch = TRUE)
+```
+
+```{r disciples_longtail_boxplot}
+ggplot(us, aes(disciples, freq_longtail_art)) + 
+  geom_boxplot(notch = TRUE)
+```
+
+Surtout, disciples sont plus haut sur toutes les mesures de diversité (mais pas disponibles dans ce doc, il faut aller au doc eclectisme)
+
+```{r disciples_diversity_boxplot, eval=FALSE}
+ggplot(us, aes(disciples, div_herfindahl)) + 
+  geom_boxplot(notch = TRUE)
+```
+
+
+```{r disciples_nbfavorites_boxplot}
+## Par contre, moins de favoris (peut-être variable très discriminante)
+ggplot(us, aes(disciples, nb_favorites)) + 
+  geom_boxplot(notch = TRUE) +
+  ylim(0, 100)
+```
+
+
+```{r disciples_age_boxplot}
+## Un peu plus âgés
+ggplot(us, aes(disciples, age)) + 
+  geom_boxplot(notch = TRUE)
 
 ```
 
