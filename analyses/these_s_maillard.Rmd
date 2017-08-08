@@ -80,12 +80,7 @@ freq(us$gender, exclude = NA) %>% kable(caption = "Distribution du genre")
 
 
 ```{r TP_date_inscription}
-# maillard: p. 197
-us <- mutate(us, dist_inscription = cut(as.numeric(ymd("20140407") - us$date_registered), 
-                                        breaks = c(-1, 7, 365, 365*2, 365*5, Inf),
-                                        labels = c("Nouveaux utilisateurs", "Moins d'un an", "Un à deux ans", "Deux à cinq ans", "Plus de cinq ans")))
-
-freq(us$dist_inscription, cum = TRUE, exclude = NA) %>% 
+freq(us$anciennete_cat, cum = TRUE, exclude = NA) %>% 
   kable(caption = "Distribution des usagers par date d'inscription")
 
 ```
@@ -134,9 +129,7 @@ ggplot(df, aes(x = app_type, y = f)) +
 
 
 ```{r ri_plat_type_abo}
-group_by(st, user_id) %>% 
-  summarise(t = first(offer_id)) %>% 
-  count(t) %>%  kable(caption = "Distribution des forfaits employés")
+freq(us$offer_id) %>%  kable(caption = "Distribution des types d'offre employés")
 ```
 
 
@@ -206,15 +199,13 @@ count(st, art_id) %>%
 ```
 
 
+```{r nouveauteecoute}
+freq(st$nouveaute) %>% kable(caption = "Fréquence d'écoute des nouveautés")
+```
+
 ### Saisonnalité des écoutes
 
 ```{r ecoutes_par_semaine, fig.cap = "Distribution des écoutes par semaine"}
-st <- mutate(st,
-             week = week(timestamp),
-             wday = lubridate::wday(timestamp, label = TRUE),
-             yday = yday(timestamp),
-             hour = hour(timestamp))
-
 ggplot(st, aes(x = week)) + 
   geom_point(stat = "count") +
   geom_line(stat = "count") +
@@ -305,7 +296,7 @@ group_by(st, art_id) %>%
 
 
 
-```{r nombre_artistes_perdiem, fig.cap = "Nombre d'artistes différents écoutés par jour"}
+```{r nombre_artistes_perdiem, fig.cap = "Nombre d'artistes différents écoutés par jour", eval=FALSE}
 count(st, yday, art_id) %>% 
   summarise(n = n()) %>% 
   ggplot(aes(x = yday, y = n)) +

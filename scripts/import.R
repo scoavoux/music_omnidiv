@@ -24,9 +24,9 @@ so <- read_tsv("data/orig/song_catalog.tsv",
 ## Corriger les chansons dont la durée est abérrante (> 2h)
 so <- mutate(so, duration = ifelse(duration > 3600*2, NA, duration)) %>% 
 ## Corriger les dates
-  mutate_at(.cols = vars(ends_with("_release")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd())) %>% 
-## Nouveauté
-  mutate(nouveaute = factor(year(physical_release) >= 2014 | year(digital_release) >= 2014, levels = c(TRUE, FALSE), labels = c("Nouveauté", "Pas une nouveauté")))
+  mutate_at(.vars = vars(ends_with("_release")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd())) %>% 
+## Nouveauté : on prend les pistes publiées dans l'année ou l'année précédente
+  mutate(nouveaute = factor(year(physical_release) >= 2013 | year(digital_release) >= 2013, levels = c(TRUE, FALSE), labels = c("Nouveauté", "Pas une nouveauté")))
 
 ###### Artists ######
 
@@ -151,7 +151,7 @@ us <- read_tsv("data/orig/orange_user_detail.tsv",
 # TODO: enlever les valeurs aberrantes (grands nombre de streams; cf. code Sisley)
 
 ## Mettre les dates dans le bon format ; calculer l'âge
-us <- mutate_at(us, .cols = vars(starts_with("date_")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd())) %>% 
+us <- mutate_at(us, .vars = vars(starts_with("date_")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd())) %>% 
   ## supprimer les plus jeunes (ages aberrants)
   mutate(age = 2013 - year(date_birth),
          age = ifelse(age < 10, NA, age)) %>% 
@@ -162,6 +162,23 @@ us <- mutate(us, city = tolower(city) %>% chartr("éèêëàâäîïùûüôöç
                                                  "eeeeaaaiiuuuooc-", 
                                                  .) %>% str_trim()) %>% 
   left_join(select(cities, origname, revenu_median, population), by = c("city" = "origname"))
+
+## Ancienneté sur Deezer
+us <- mutate(us, 
+             anciennete_days = as.numeric(ymd("20140407") - date_registered),
+             anciennete_cat = cut(anciennete_days, 
+                                  breaks = c(-1, 7, 365, 365*2, 365*5, Inf),
+                                  labels = c("Nouveaux utilisateurs", "Moins d'un an", "Un à deux ans", "Deux à cinq ans", "Plus de cinq ans")))
+
+
+## Type d'offre
+us <- count(st, user_id, offer_id) %>% 
+  group_by(user_id) %>% 
+  filter(n == max(n)) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  select(user_id, offer_id) %>% 
+  right_join(us, by = "user_id")
 
 
 ###### Fav songs ######
@@ -197,6 +214,7 @@ us <- filter(far, add == 1) %>%
   count(user_id) %>% 
   rename(nb_fav_artists = n) %>% 
   right_join(us, by = "user_id")
+
 st <- select(so, sng_id, nouveaute) %>% 
   right_join(st, by = "sng_id") %>% 
   left_join(filter(far, add == 1) %>% 
@@ -294,14 +312,75 @@ gc()
 st$context_cat <- factor(context_cat_dic[st$context_name])
 
 ## Temporalité de l'écoute
-# st <- mutate(st, 
-#              week = week(timestamp),
-#              wday = lubridate::wday(timestamp, label = TRUE),
-#              yday = yday(timestamp),
-#              hour = hour(timestamp))
+st <- mutate(st,
+             week = week(timestamp),
+             wday = lubridate::wday(timestamp, label = TRUE),
+             yday = yday(timestamp),
+             hour = hour(timestamp))
 
 ## Genres
 st <- left_join(st, select(genres, genre = name, alb_id), by = "alb_id")
+
+###### Appareiller streams et users######
+st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
+                               NA,
+                               ifelse(context_cat %in% c("stock", "search", "artist_disco", "artist_top", "ND", "unknown") | is.na(context_cat), # que faire de artist_top
+                                      "Non guidée",
+                                      "Guidée")) %>% 
+               factor(),
+             type_guid = ifelse(is.na(guid),
+                                NA,
+                                ifelse(guid == "Non guidée", 
+                                       "Non guidée",
+                                       ifelse(context_cat %in% c("experts_editor", "explore_release", "social", "player_defaut", "top", "feed_playlist", "feed_track", "feed_album"), 
+                                              "Guidage", 
+                                              "Flux"))) %>% 
+               factor()) 
+
+us <- group_by(st, user_id) %>% 
+  summarise(nb_ecoutes = n(),
+            nb_guid = sum(guid == "Guidée", na.rm=TRUE),
+            fq = nb_guid / sum(!is.na(guid)),
+            fg = sum(type_guid == "Guidage", na.rm=TRUE) / sum(type_guid != "Non guidée" & !is.na(type_guid)),
+            passifs = factor(fq > 0.8 & nb_ecoutes > 100, levels = c(TRUE, FALSE), labels = c("Usagers principalement passifs", "Autres usagers")),
+            nb_artists = n_distinct(art_id), 
+            freq_mobile = sum(app_type == "mobile", na.rm = TRUE)/n(),
+            freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / n(),
+            nb_dispositifs = n_distinct(context_cat), 
+            freq_star_sng = sum(sng_pop == "Star", na.rm = TRUE) / n(),
+            freq_star_art = sum(art_pop == "Star", na.rm = TRUE) / n(),
+            freq_longtail_art = sum(art_pop == "Long tail", na.rm = TRUE) / n(),
+            freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
+  right_join(us, by = "user_id")
+
+## Diversité des genres écoutés
+
+# On utilise les métriques de la présentation de Robin Lamarche-Perrin et al
+# Par conséquent:
+#   + richness = richness
+#   + shannon = exponentielle de entropie de shannon
+#   + herfindahl = inverse de index de Herfindahl
+#   + BergerParker = inverse de index de Berger-Parker
+# On ne conserve pour le moment que l'entropie de Shannon
+# Propriétés: maximum = nombre de genres disponibles
+# 
+us <- count(st, user_id, genre) %>% 
+  group_by(user_id) %>% 
+  mutate(f = n / sum(n)) %>% 
+  summarize(#div_richness = length(unique(genre)),
+            div_genre = prod(f^f)^-1
+            # div_herfindahl = sum(f^2)^-1,
+            # div_bergerparker = max(f)^-1
+            ) %>% 
+  right_join(us)
+
+## Diversité des artistes écoutés
+us <- count(st, user_id, art_id) %>% 
+  group_by(user_id) %>% 
+  mutate(f = n / sum(n)) %>% 
+  summarize(div_artists = prod(f^f)^-1) %>% 
+  right_join(us)
+
 
 ###### Fav albums ######
 

@@ -36,45 +36,13 @@ load("data/french_users.RData")
 
 Dans cette partie, l'individu considéré est l'usager : on travaille donc uniquement sur des variables agrégée à partir des écoutes.
 
-```{r recodage_ecoutes_guidées}
-# Ajouter la distinction des différentes écoutes guidées
-st <- filter(st, !(context_cat %in% c("ND", "unknown"))) %>% 
-  mutate(guid = ifelse(context_cat %in% c("stock", "search", "artist_disco", "artist_top", "ND", "unknown") | is.na(context_cat), # que faire de artist_top
-                       "Non guidée",
-                       "Guidée") %>% 
-           factor(),
-         type_guid = ifelse(guid == "Non guidée", 
-                            "Non guidée",
-                            ifelse(context_cat %in% c("experts_editor", "explore_release", "social", "player_defaut", "top", "feed_playlist", "feed_track", "feed_album"), 
-                                   "Guidage", 
-                                   "Flux")) %>% 
-           factor()) 
-
-us <- group_by(st, user_id) %>% 
-  summarise(nb_ecoutes = n(),
-            nb_guid = sum(guid == "Guidée"),
-            fq = sum(guid == "Guidée") / nb_ecoutes,
-            fg = sum(type_guid == "Guidage") / sum(type_guid != "Non guidée"),
-            nb_artists = n_distinct(art_id), 
-            freq_mobile = sum(app_type == "mobile", na.rm = TRUE)/n(),
-            freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / n(),
-            nb_dispositifs = n_distinct(context_cat), 
-            freq_star_sng = sum(sng_pop == "Star", na.rm = TRUE) / n(),
-            freq_star_art = sum(art_pop == "Star", na.rm = TRUE) / n(),
-            freq_longtail_art = sum(art_pop == "Long tail", na.rm = TRUE) / n(),
-            freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
-  full_join(us)
-
+```{r selection_usagers}
 ## Enlever les très très gros usagers
 ## ainsi que les très faibles usagers
 us <- filter(us, 
              nb_ecoutes < 10000, 
              nb_ecoutes > 200,
              !is.na(nb_ecoutes))
-
-## Ajouter temps depuis l'inscription
-us <- mutate(us, experience = 2014 - year(date_registered))
-
 ```
 
 On calcule la part des écoutes guidées dans les écoutes totales. Ce calcul ignore les écoutes dont le contexte est inconnu, soit plus de la moitié d'entre elles. La proportion d'écoutes guidées est donc définie comme:
@@ -112,7 +80,7 @@ ggplot(us, aes(1, fq)) +
 ## Lien entre écoutes guidées et propriétés socio-démographiques des usagers
 
 ```{r scatterplot_fq_socdem, fig.cap="Part d'écoutes guidées par caractéristiques socio-démographiques"}
-select(us,  fq, age, experience, revenu_median, population) %>% 
+select(us,  fq, age, anciennete_days, revenu_median, population) %>% 
   gather(key, value, -fq) %>% 
   filter(!is.na(value)) %>% 
   ggplot(aes(x = fq, y = value)) +
@@ -131,16 +99,6 @@ filter(us, !is.na(gender)) %>%
 ```
 
 ```{r boxplot_fq_abo, fig.cap = "Part d'écoutes guidées par type d'abonnement"}
-
-## réintegrer type d'offre
-
-us <- count(st, user_id, offer_id) %>% 
-  filter(n == max(n)) %>% 
-  slice(1) %>% 
-  ungroup() %>% 
-  dplyr::select(user_id, offer_id) %>% 
-  right_join(us, by = "user_id") 
-summary(us$offer_id)
 
 ggplot(us, aes(offer_id, fq)) +
   geom_boxplot(notch = TRUE) +
@@ -202,7 +160,7 @@ censReg provides such models
 -->
 
 ```{r fq_tobit}
-reg <- censReg(fq ~ gender + age + experience + nb_ecoutes + nb_artists, left = 0, right = 1, data = us)
+reg <- censReg(fq ~ gender + age + anciennete_days + nb_ecoutes + nb_artists, left = 0, right = 1, data = us)
 stargazer(reg, type = "html")
 
 ```
@@ -247,7 +205,7 @@ ggplot(us, aes(1, fg)) +
 ## Lien entre écoutes recommandées et propriétés socio-démographiques des usagers
 
 ```{r scatterplot_fg_socdem, fig.cap="Part d'écoutes recommandées par caractéristiques socio-démographiques"}
-select(us,  fg, age, experience, revenu_median, population) %>% 
+select(us,  fg, age, anciennete_days, revenu_median, population) %>% 
   gather(key, value, -fg) %>% 
   filter(!is.na(value)) %>% 
   ggplot(aes(x = fg, y = value)) +
@@ -311,7 +269,7 @@ select(df, -user_id) %>%
 <!-- ## Régression -->
 
 ```{r fg_tobit, eval=FALSE}
-reg <- censReg(fg ~ gender + age + experience + nb_ecoutes + nb_artists, left = 0, right = 1, data = us)
+reg <- censReg(fg ~ gender + age + anciennete_days + nb_ecoutes + nb_artists, left = 0, right = 1, data = us)
 options(scipen = 99)
 str(margEff(reg))
 stargazer(reg, type = "text")
@@ -320,109 +278,99 @@ stargazer(reg, type = "text")
 ```{r tobit_a_tester, eval=FALSE}
 library(zoib)
 library(betareg)
-reg <- tobit(fg ~ gender + age + experience + nb_ecoutes + nb_artists, left = 0, right = 1, data = us)
+reg <- tobit(fg ~ gender + age + anciennete_days + nb_ecoutes + nb_artists, left = 0, right = 1, data = us)
 
-reg <- betareg(fg ~ gender + age + experience + nb_ecoutes + nb_artists, data = filter(us, fg > 0 & fg < 1))
+reg <- betareg(fg ~ gender + age + anciennete_days + nb_ecoutes + nb_artists, data = filter(us, fg > 0 & fg < 1))
 plot(reg)
-zoib(fg ~ gender + age + experience + nb_ecoutes + nb_artists | 1, data = us)
+zoib(fg ~ gender + age + anciennete_days + nb_ecoutes + nb_artists | 1, data = us)
 
 ```
 
 # Analyse des "outsiders" : les gros usagers d'écoutes guidées
 
-```{r disciples_init}
-## NB: on considère seulement ceux qui ont écoutés plus de 100 pistes durant la période
-us$disciples <- us$fq > 0.8
-us$disciples[us$nb_ecoutes < 100] <- NA
-us$disciples <- factor(us$disciples)
-
+```{r passifs_freq}
+freq(us$passifs) %>% kable()
 ```
 
-```{r disciples_freq}
-freq(us$disciples)
+```{r passifs_gender_freq}
+## Analyse systématique des variables correlées avec passifs ; on ne conserve que celles qui le semblent
+lprop(table(us$passifs, us$gender)) %>% kable()
 ```
 
-```{r disciples_gender_freq}
-## Analyse systématique des variables correlées avec disciples ; on ne conserve que celles qui le semblent
-lprop(table(us$disciples, us$gender)) %>% kable()
-```
-
-```{r disciples_nbart_boxplot}
+```{r passifs_nbart_boxplot}
 ## Différences dans le nombre d'artistes différents écoutés
-ggplot(us, aes(disciples, nb_artists)) + 
+ggplot(us, aes(passifs, nb_artists)) + 
   geom_boxplot(notch = TRUE)
 
 ```
 
-```{r nbart_disciples_lm}
+```{r nbart_passifs_lm}
 ## Mais est-elle du à écoutes totales? Il semble que non
-lm(nb_artists ~ nb_ecoutes + disciples, data=us) %>% stargazer(type = "html")
+lm(nb_artists ~ nb_ecoutes + passifs, data=us) %>% stargazer(type = "html")
 ```
 
+```{r passifs_offer_table}
+lprop(table(us$passifs, us$offer_id)) %>% kable()
+```
 
-```{r disciples_fg_boxplot}
-ggplot(us, aes(disciples, fg)) + 
+```{r passifs_fg_boxplot}
+ggplot(us, aes(passifs, fg)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r disciples_mobile_boxplot}
-ggplot(us, aes(disciples, freq_mobile)) + 
+```{r passifs_mobile_boxplot}
+ggplot(us, aes(passifs, freq_mobile)) + 
   geom_boxplot()
 ```
 
-```{r disciples_dispositifs_boxplot}
-ggplot(us, aes(disciples, nb_dispositifs)) + 
+```{r passifs_dispositifs_boxplot}
+ggplot(us, aes(passifs, nb_dispositifs)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r disciples_starart_boxplot}
-ggplot(us, aes(disciples, freq_star_art)) + 
+```{r passifs_starart_boxplot}
+ggplot(us, aes(passifs, freq_star_art)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r disciples_starsng_boxplot}
-ggplot(us, aes(disciples, freq_star_sng)) + 
+```{r passifs_starsng_boxplot}
+ggplot(us, aes(passifs, freq_star_sng)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r disciples_longtail_boxplot}
-ggplot(us, aes(disciples, freq_longtail_art)) + 
+```{r passifs_longtail_boxplot}
+ggplot(us, aes(passifs, freq_longtail_art)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-Surtout, disciples sont plus haut sur toutes les mesures de diversité (mais pas disponibles dans ce doc, il faut aller au doc eclectisme)
+Surtout, passifs sont plus haut sur toutes les mesures de diversité (mais pas disponibles dans ce doc, il faut aller au doc eclectisme)
 
-```{r disciples_diversity_boxplot, eval=FALSE}
-ggplot(us, aes(disciples, div_herfindahl)) + 
+```{r passifs_diversity_boxplot, eval=FALSE}
+ggplot(us, aes(passifs, div_herfindahl)) + 
   geom_boxplot(notch = TRUE)
 ```
 
 
-```{r disciples_nbfavorites_boxplot}
+```{r passifs_nbfavorites_boxplot}
 ## Par contre, moins de favoris (peut-être variable très discriminante)
-ggplot(us, aes(disciples, nb_favorites)) + 
+ggplot(us, aes(passifs, nb_favorites)) + 
   geom_boxplot(notch = TRUE) +
   ylim(0, 100)
 ```
 
 
-```{r disciples_age_boxplot}
+```{r passifs_age_boxplot}
 ## Un peu plus âgés
-ggplot(us, aes(disciples, age)) + 
+ggplot(us, aes(passifs, age)) + 
   geom_boxplot(notch = TRUE)
 
 ```
 
 # Rythme du guidage
 
-```{r init_datetime_variables}
-st <- mutate(st, wday = lubridate::wday(timestamp, label = TRUE),
-                 hour = hour(timestamp))
-```
-
 ```{r rythme_guide, fig.cap = "Rythme horaire des écoutes guidées (vs. écoutes de stock)"}
 group_by(st, wday, hour) %>% 
-  summarize(g = sum(guid == "Guidée")/n()) %>% 
+  summarize(g = sum(guid == "Guidée", na.rm = TRUE) / sum(!is.na(guid))) %>% 
   ggplot(aes(x = hour, y = g, color = wday)) +
   geom_line() +
   geom_point() +
@@ -431,11 +379,11 @@ group_by(st, wday, hour) %>%
 
 ```{r rythme_recommande, fig.cap = "Rythme horaire des écoutes recommandées (vs. écoutes de flux)"}
 group_by(st, wday, hour) %>% 
-  summarize(g = sum(type_guid == "Guidage")/sum(type_guid != "Non guidée")) %>% 
+  summarize(g = sum(type_guid == "Guidage", na.rm=TRUE) / sum(!is.na(type_guid))) %>% 
   ggplot(aes(x = hour, y = g, color = wday)) +
   geom_line() +
   geom_point() +
-  ylim(0, .75)
+  ylim(0, .2)
 ```
 
 
@@ -448,7 +396,6 @@ df <- count(st, user_id, context_cat) %>%
   filter(!is.na(context_cat)) %>% 
   spread(context_cat, n, fill = 0)
 
-source("https://raw.githubusercontent.com/briatte/ggcorr/master/ggcorr.R")
 ggcorr(df[, -1], nbreaks = 5)
 
 ```
@@ -470,7 +417,7 @@ df <- count(st, art_id, context_cat) %>%
   filter(!is.na(context_cat)) %>% 
   spread(context_cat, n, fill = 0)
 
-source("https://raw.githubusercontent.com/briatte/ggcorr/master/ggcorr.R")
+
 ggcorr(df[, -1], nbreaks = 5)
 
 ```
@@ -483,7 +430,7 @@ df <- filter(st, art_pop != "Long tail") %>%
   filter(!is.na(context_cat)) %>% 
   spread(context_cat, n, fill = 0)
 
-source("https://raw.githubusercontent.com/briatte/ggcorr/master/ggcorr.R")
+
 ggcorr(df[, -1], nbreaks = 5)
 
 ```
@@ -500,6 +447,8 @@ On revient ici aux données des tracks: il s'agit de savoir, dans chaque genre, 
 
 ```{r genre_guid, fig.cap = "Part de pistes écoutées suite à du guidage, par genre écouté"}
 count(st, genre, guid) %>% 
+  filter(!is.na(guid)) %>% 
+  group_by(genre) %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(guid == "Guidée", !is.na(genre)) %>% 
@@ -509,7 +458,7 @@ count(st, genre, guid) %>%
     geom_col() +
     theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
     labs(y = "Part d'écoute guidées", x = "Genres") +
-    ylim(0, 0.5)
+    ylim(0, 0.4)
   
 ```
 
@@ -521,7 +470,8 @@ On voit ainsi une opposition claire entre d'une part les genres jeunesses, films
 
 ```{r genre_type_guid, fig.cap = "Part de pistes écoutées suite à de la recommandation vs. flux, par genre écouté"}
 count(st, genre, type_guid) %>% 
-  filter(type_guid != "Non guidée", !is.na(genre)) %>% 
+  filter(type_guid != "Non guidée", !is.na(type_guid), !is.na(genre)) %>% 
+  group_by(genre) %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(type_guid == "Guidage") %>% 
@@ -539,8 +489,10 @@ En matière de formes de guidages, les écarts absolus sont aussi important. Cet
 
 ## Guidage par popularité
 
-```{r}
+```{r guid_artpop_boxplot}
 count(st, art_pop, guid) %>% 
+  filter(!is.na(guid)) %>% 
+  group_by(art_pop) %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(guid == "Guidée", !is.na(art_pop)) %>% 
@@ -552,8 +504,10 @@ count(st, art_pop, guid) %>%
   
 ```
 
-```{r}
+```{r guid_sngpop_boxplot}
 count(st, sng_pop, guid) %>% 
+  filter(!is.na(guid)) %>% 
+  group_by(sng_pop) %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(guid == "Guidée", !is.na(sng_pop)) %>% 
@@ -567,9 +521,10 @@ count(st, sng_pop, guid) %>%
 
 ## Flux/recommandation par popularité
 
-```{r}
+```{r typeguid_artpop_boxplot}
 count(st, art_pop, type_guid) %>% 
   filter(type_guid != "Non guidée") %>% 
+  group_by(art_pop) %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(type_guid == "Guidage", !is.na(art_pop)) %>% 
@@ -581,9 +536,10 @@ count(st, art_pop, type_guid) %>%
   
 ```
 
-```{r}
+```{r typeguid_sngpop_boxplot}
 count(st, sng_pop, type_guid) %>% 
   filter(type_guid != "Non guidée") %>% 
+  group_by(sng_pop) %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(type_guid == "Guidage", !is.na(sng_pop)) %>% 
@@ -597,8 +553,10 @@ count(st, sng_pop, type_guid) %>%
 
 ## Guidage par type d'abonnement
 
-```{r}
-count(st, offer_id, guid) %>% 
+```{r guid_offerid_boxplot}
+count(st, offer_id, guid) %>%
+  filter(!is.na(guid)) %>% 
+  group_by(offer_id) %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(guid == "Guidée", !is.na(offer_id)) %>% 
@@ -611,9 +569,10 @@ count(st, offer_id, guid) %>%
 ```
 
 ## Flux/reco par type d'abonnement
-```{r}
+```{r typeguid_offerid_boxplot}
 count(st, offer_id, type_guid) %>% 
   filter(type_guid != "Non guidée") %>% 
+  group_by(offer_id) %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(type_guid == "Guidage", !is.na(offer_id)) %>% 
@@ -628,13 +587,13 @@ count(st, offer_id, type_guid) %>%
 
 ## Durée d'écoute par guidage
 
-```{r, fig.cap = "Temps d'écoute par guidage"}
+```{r guid_length_boxplot, fig.cap = "Temps d'écoute par guidage"}
 ggplot(filter(st, length < 1000), aes(guid, length)) +
   geom_boxplot(notch= TRUE) +
   labs(x = "Guidage", y = "Temps d'écoute en secondes")
 ```
 
-```{r, fig.cap = "Temps d'écoute par type de guidage"}
+```{r typeguid_length_boxplot, fig.cap = "Temps d'écoute par type de guidage"}
 ggplot(filter(st, length < 1000), aes(type_guid, length)) +
   geom_boxplot(notch= TRUE) +
   labs(x = "Type de guidage", y = "Temps d'écoute en secondes")
@@ -642,8 +601,10 @@ ggplot(filter(st, length < 1000), aes(type_guid, length)) +
 
 ## Guidage par support d'écoute
 
-```{r}
+```{r guid_apptype_boxplot}
 count(st, app_type, guid) %>% 
+  filter(!is.na(guid)) %>% 
+  group_by(app_type) %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(guid == "Guidée", !is.na(app_type)) %>% 
@@ -655,13 +616,14 @@ count(st, app_type, guid) %>%
 ```
 
 
-```{r}
+```{r typeguid_apptype_boxplot}
 count(st, app_type, type_guid) %>% 
+  group_by(app_type) %>% 
   filter(type_guid != "Non guidée") %>% 
   mutate(f = n / sum(n)) %>% 
   ungroup() %>% 
   filter(type_guid == "Guidage", !is.na(app_type)) %>% 
-  ggplot(aes(app_type, f)) + 
+  ggplot(aes(app_type, f)) +
     geom_col() +
     theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
     labs(y = "Part d'écoute recommandées (vs. flux)", x = "Support d'écoute") +
