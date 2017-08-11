@@ -24,9 +24,32 @@ so <- read_tsv("data/orig/song_catalog.tsv",
 ## Corriger les chansons dont la durée est abérrante (> 2h)
 so <- mutate(so, duration = ifelse(duration > 3600*2, NA, duration)) %>% 
 ## Corriger les dates
-  mutate_at(.vars = vars(ends_with("_release")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd())) %>% 
-## Nouveauté : on prend les pistes publiées dans l'année ou l'année précédente
-  mutate(nouveaute = factor(year(physical_release) >= 2013 | year(digital_release) >= 2013, levels = c(TRUE, FALSE), labels = c("Nouveauté", "Pas une nouveauté")))
+  mutate_at(.vars = vars(ends_with("_release")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd()))
+
+## On récupère les valeurs manquantes (en tous cas la plupart)
+## à partir d'un nouveau scraping de Deezer
+## à refaire un jour en refaisant le scrapping genres...
+## pour avoir vraiment toutes les dates de la même source
+load("data/dates_raw.RData")
+dates <- bind_rows(l) %>% 
+  mutate(release_date = ifelse(release_date == "0000-00-00", NA, release_date))
+
+so <- left_join(so, dates, by = "alb_id") %>% mutate(release_date = ymd(release_date))
+
+so <-mutate(so, 
+           release_date = 
+             ifelse(!is.na(release_date), 
+                    release_date, 
+                    ifelse(physical_release < digital_release, 
+                           physical_release,
+                           digital_release)) %>% 
+             as.Date(origin = "1970-01-01") %>% 
+             ifelse(. > ymd("2015-01-01"), NA, .) %>% 
+             as.Date(origin = "1970-01-01"),
+           release_year = year(release_date),
+           nouveaute = factor(release_year >= 2013, levels = c(TRUE, FALSE), labels = c("Nouveauté", "Pas une nouveauté")))
+
+rm(dates, l, i)
 
 ###### Artists ######
 
@@ -47,6 +70,21 @@ st <- read_tsv("data/orig/stream.tsv",
 ## Supprimer un certain nombre de variables inutilisées
 st <- select(st, -type_stream, -country, -context_id, -app_id, -timestamp_off, -timestamp_sync, -pause, -seek)
 
+## Vérifier que longueur moindre que longueur de la piste
+## + ajouter année de diffusion
+st <- select(so, sng_id, art_id, alb_id, duration, release_year, nouveaute) %>% 
+  right_join(st, by = "sng_id") %>% 
+  mutate(length = ifelse(length > duration, duration, length))
+
+# 5% de durée d'écoute négative... NA?
+# sum(st$length < 0) / nrow(st)
+st$length[st$length < 0] <- NA
+
+## Enlever les écoutes avant le 1er avril 2014
+st <- filter(st, (timestamp >= 1396310400 & timestamp < 1420113600) | is.na(timestamp))
+
+## Temps d'écoute: supprimer certains utilisateurs
+
 ## Note: Code de Sisley ne documente pas comment elle a fait.
 ## Simplement, elle supprime certaines personnes par leur index
 ## cf. Database_create.do, l. 26-53
@@ -55,27 +93,14 @@ u <- group_by(st, user_id) %>%
   summarize(n = n(),
             t = sum(length)/(60*60*24))
 
+## Supprimer sur la base ci-dessus (plus de 40000 tracks ou plus de 100h d'écoutes cumulées)
+users_to_remove <- filter(u, n > 4e04 | t > 1e02)
 # ggplot(u, aes(x = n)) + geom_histogram() + scale_x_log10()
 # ggplot(u, aes(x = t)) + geom_histogram() + scale_x_log10()
 
-## Temps d'écoute
-
-## Vérifier que longueur moindre que longueur de la piste
-## + ajouter année de diffusion
-st <- select(so, sng_id, art_id, duration) %>% 
-  right_join(st, by = "sng_id") %>% 
-  mutate(length = ifelse(length > duration, duration, length))
-
-# 5% de durée d'écoute négative... NA?
-# sum(st$length < 0) / nrow(st)
-st$length[st$length < 0] <- NA
-
-## Supprimer sur la base ci-dessus (plus de 40000 tracks ou plus de 100h d'écoutes cumulées)
-st <- anti_join(st, filter(u, n > 4e04 | t > 1e02), by = "user_id")
+st <- anti_join(st, users_to_remove, by = "user_id")
 rm(u)
 
-## Enlever les écoutes avant le 1er avril 2014
-st <- filter(st, (timestamp >= 1396310400 & timestamp < 1420113600) | is.na(timestamp))
 
 # Mettre les données au bon format
 st <- mutate(st, 
@@ -150,6 +175,10 @@ us <- read_tsv("data/orig/orange_user_detail.tsv",
                col_types = "ccccc")
 # TODO: enlever les valeurs aberrantes (grands nombre de streams; cf. code Sisley)
 
+## Supprimer les individus supprimé de la base streams
+## parce que trop d'écoutes
+us <- anti_join(us, users_to_remove, by = "user_id")
+
 ## Mettre les dates dans le bon format ; calculer l'âge
 us <- mutate_at(us, .vars = vars(starts_with("date_")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd())) %>% 
   ## supprimer les plus jeunes (ages aberrants)
@@ -161,7 +190,7 @@ us <- mutate_at(us, .vars = vars(starts_with("date_")), .funs = funs(ifelse(. ==
 us <- mutate(us, city = tolower(city) %>% chartr("éèêëàâäîïùûüôöç ", 
                                                  "eeeeaaaiiuuuooc-", 
                                                  .) %>% str_trim()) %>% 
-  left_join(select(cities, origname, revenu_median, population), by = c("city" = "origname"))
+  left_join(cities, by = c("city" = "origname"))
 
 ## Ancienneté sur Deezer
 us <- mutate(us, 
@@ -182,6 +211,9 @@ us <- count(st, user_id, offer_id) %>%
 
 
 ###### Fav songs ######
+
+## Une manière d'accélerer ce code serait de fusionner d'abord les différents fichiers de favori, 
+## puis de les merger avec St/us en une seule fois, plutôt que les multiples passages que l'on fait ici
 
 fs <- read_tsv("data/orig/fav_songs.tsv", 
                col_names = c("user_id", "X2", "sng_id", "timestamp_favsong"))
@@ -215,15 +247,13 @@ us <- filter(far, add == 1) %>%
   rename(nb_fav_artists = n) %>% 
   right_join(us, by = "user_id")
 
-st <- select(so, sng_id, nouveaute) %>% 
-  right_join(st, by = "sng_id") %>% 
-  left_join(filter(far, add == 1) %>% 
-              select(-add) %>% 
-              group_by(user_id, art_id) %>% 
-              mutate(timestamp_favartist = min(timestamp_favartist)) %>% 
-              ungroup() %>% 
-              distinct()
-            ) %>% 
+st <- left_join(st, filter(far, add == 1) %>% 
+                  select(-add) %>% 
+                  group_by(user_id, art_id) %>% 
+                  mutate(timestamp_favartist = min(timestamp_favartist)) %>% 
+                  ungroup() %>% 
+                  distinct()
+) %>% 
   mutate(fav_artist = factor(ifelse(timestamp_favartist <= timestamp & !is.na(timestamp_favartist), "Favorite", "Not favorite"))) %>% 
   group_by(user_id, art_id) %>% 
   mutate(fav_artist_other_song = factor(ifelse(any(fav_artist == "Favorite"), min(timestamp), 9999999999) <= timestamp, 
@@ -235,20 +265,19 @@ st <- select(so, sng_id, nouveaute) %>%
 fal <- read_tsv("data/orig/fav_albums.tsv",
                 col_names = c("user_id", "alb_id", "add", "timestamp_favalbum"))
 # sts <- st
-st <- select(so, sng_id, alb_id) %>% 
-  right_join(st, by = "sng_id") %>% 
-  left_join(filter(fal, add == 1) %>% 
-              select(-add) %>% 
-              group_by(user_id, alb_id) %>% 
-              mutate(timestamp_favalbum = min(timestamp_favalbum)) %>% 
-              ungroup() %>% 
-              distinct()
-  ) %>% 
+st <- left_join(st, 
+                filter(fal, add == 1) %>% 
+                  select(-add) %>% 
+                  group_by(user_id, alb_id) %>% 
+                  mutate(timestamp_favalbum = min(timestamp_favalbum)) %>% 
+                  ungroup() %>% 
+                  distinct()
+) %>% 
   mutate(fav_album = factor(ifelse(timestamp_favalbum <= timestamp & !is.na(timestamp_favalbum), "Favorite", "Not favorite"))) %>% 
   group_by(user_id, alb_id) %>% 
   mutate(fav_album_other_song = factor(ifelse(any(fav_album == "Favorite"), min(timestamp), 9999999999) <= timestamp, 
-                                        levels = c(TRUE, FALSE), 
-                                        labels = c("Favorite", "Not favorite"))) %>% 
+                                       levels = c(TRUE, FALSE), 
+                                       labels = c("Favorite", "Not favorite"))) %>% 
   ungroup()
 
 context_cat_dic <- c( "tops_album" = "top",
@@ -343,8 +372,11 @@ us <- group_by(st, user_id) %>%
             fq = nb_guid / sum(!is.na(guid)),
             fg = sum(type_guid == "Guidage", na.rm=TRUE) / sum(type_guid != "Non guidée" & !is.na(type_guid)),
             passifs = factor(fq > 0.8 & nb_ecoutes > 100, levels = c(TRUE, FALSE), labels = c("Usagers principalement passifs", "Autres usagers")),
+            nb_tracks = n_distinct(sng_id),
             nb_artists = n_distinct(art_id), 
+            volume_ecoute = sum(length), 
             freq_mobile = sum(app_type == "mobile", na.rm = TRUE)/n(),
+            freq_desktop = sum(app_type == "desktop", na.rm = TRUE)/n(),
             freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / n(),
             nb_dispositifs = n_distinct(context_cat), 
             freq_star_sng = sum(sng_pop == "Star", na.rm = TRUE) / n(),
@@ -379,6 +411,13 @@ us <- count(st, user_id, art_id) %>%
   group_by(user_id) %>% 
   mutate(f = n / sum(n)) %>% 
   summarize(div_artists = prod(f^f)^-1) %>% 
+  right_join(us)
+
+## Diversité des chansons écoutés
+us <- count(st, user_id, sng_id) %>% 
+  group_by(user_id) %>% 
+  mutate(f = n / sum(n)) %>% 
+  summarize(div_sng = prod(f^f)^-1) %>% 
   right_join(us)
 
 

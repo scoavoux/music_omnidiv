@@ -1,6 +1,8 @@
 # Get album genres from Deezer API
 # Starting from unique albums as defined in the song dataset
 
+# Si c'était à refaire, ne pas oublier de rappatrier également la date (release_date)
+
 library(jsonlite)
 library(tidyverse)
 
