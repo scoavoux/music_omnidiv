@@ -23,7 +23,7 @@ library(randomForest)
 library(FactoMineR)
 library(stargazer)
 library(GGally)
-
+library(factoextra)
 theme_set(theme_bw())
 
 load("data/streams.RData")
@@ -79,6 +79,8 @@ ggplot(us, aes(1, fq)) +
 
 ## Lien entre écoutes guidées et propriétés socio-démographiques des usagers
 
+Aucun lien clair avec les variables d'âge, d'ancienneté, de revenu médian, de taille de la population.
+
 ```{r scatterplot_fq_socdem, fig.cap="Part d'écoutes guidées par caractéristiques socio-démographiques"}
 select(us,  fq, age, anciennete_days, revenu_median, population) %>% 
   gather(key, value, -fq) %>% 
@@ -90,6 +92,7 @@ select(us,  fq, age, anciennete_days, revenu_median, population) %>%
     labs(x = "Part d'écoutes guidées")
 ```
 
+Pas de lien non plus avec le genre.
 
 ```{r boxplot_fq_gender, fig.cap = "Part d'écoutes guidées par sexe"}
 filter(us, !is.na(gender)) %>% 
@@ -97,6 +100,10 @@ filter(us, !is.na(gender)) %>%
   geom_boxplot(notch = TRUE) +
     labs(y = "Part d'écoutes guidées")
 ```
+
+Par contre, on retrouve une forte variation avec le type d'abonnement. la dispersion la plus grande est pour les abonnements gratuits et pour les abonnements premium plus. Ces derniers ont la médiane la plus élevé, avec plus de 25% d'écoutes guidées. Dans les deux derniers cas, gratuits et premium+, le troisième quartile est à 50% d'écoutes guidéeset l'on a donc un quart des usagers pour lesquels il s'agit du mode majoritaire.
+
+A l'inverse, la médiane est basse, 7-8%, pour les abonnés premium ou partenaires, et la dispersion faible (troisième quartile à 25%, soit 75% des usagers qui écoutent moins de 25% d'écoutes guidées.)
 
 ```{r boxplot_fq_abo, fig.cap = "Part d'écoutes guidées par type d'abonnement"}
 
@@ -107,6 +114,8 @@ ggplot(us, aes(offer_id, fq)) +
 
 
 ## Lien entre part d'écoutes guidées et caractéristiques des usagers
+
+Là encore, il est difficile de repérer des liens avec les caractéristiques des usagers. Les écoutes guidées diminuent avec la fréquence d'utilisation du mobile et avec le nombre de favori, et semblent liés à la fréquence d'utilisation de la radio. Mais dans tous les cas, problème est lié/intrinséque à la définition même de l'écoute (radio = guidée : favori = non guidé).
 
 ```{r scatter_fq_carac_usagers, fig.cap = "Part d'écoutes guidées par caractéristiques d'usages"}
 select(us,  fq, nb_ecoutes, nb_artists, freq_mobile, freq_radio,
@@ -127,7 +136,7 @@ select(us,  fq, nb_ecoutes, nb_artists, freq_mobile, freq_radio,
 
 ## Lien entre part d'écoutes guidées et genres écoutés
 
-L'individu, ici, est l'usager : on confronte la part d'écoute guidées à la part de chaque genre dans sa consommation totale.
+L'individu, ici, est l'usager : on confronte la part d'écoute guidées à la part de chaque genre dans sa consommation totale. Il n'y a pas de lien clair entre les deux variables.
 
 ```{r genre_init}
 df <- count(st, user_id, genre) %>% 
@@ -159,6 +168,10 @@ Proportion is a censored variable (0 to 1) => tobit model
 censReg provides such models
 -->
 
+On peut tenter de prédire la proportion d'écoutes guidées à partir d'une régression (modèle tobit censuré comme on modèlise une fréquence).
+
+Les résultats ne sont pour le moment pas convaincants.
+
 ```{r fq_tobit}
 reg <- censReg(fq ~ gender + age + anciennete_days + nb_ecoutes + nb_artists, left = 0, right = 1, data = us)
 stargazer(reg, type = "html")
@@ -167,18 +180,21 @@ stargazer(reg, type = "html")
 
 # Analyse de la part d'écoutes recommandées vs. écoutes de flux
 
+On a donc distingué les écoutes guidées des écoutes non guidées. Désormais, à l'intérieur des écoutes guidées, on ajoute une autre distinction entre flux (type radio) et guidage (à proprement parler)
 
 ## Distribution de la part d'écoutes recommandées
+
+
 
 ```{r freq_st_guid_type}
 freq(st$type_guid) %>% kable(caption = "Distribution des écoutes par usage de dispositif")
 ```
 
-La variable part d'écoutes recommandées dans le total des écoutes guidées:
+On définit pour cela une nouvelle variable, la part d'écoutes recommandées (guidage, par opposition à flux) dans le total des écoutes guidées:
 
 $$\frac{N_{écoutes\ recommandées}}{N_{écoutes\ guidées}}$$
 
-a une moyenne de `r mean(us$fg, na.rm=TRUE)`, une médiane de `r median(us$fg, na.rm=TRUE)` et un écart-type de `r sd(us$fg, na.rm=TRUE)`.
+Elle a une moyenne de `r mean(us$fg, na.rm=TRUE)`, une médiane de `r median(us$fg, na.rm=TRUE)` et un écart-type de `r sd(us$fg, na.rm=TRUE)`.
 
 ```{r density_fg, fig.cap = "Densité de la proportion d'écoutes recommandées par usager"}
 ggplot(us, aes(fg)) +
@@ -189,6 +205,7 @@ ggplot(us, aes(fg)) +
 
 ```
 
+Malgré une répartition assez équitable des deux modes, guidage et flux, dans les écoutes totales, la variable de part de recommendation a une médiane très haute et est très concentrée dans les valeurs hautes, ce qui semble signifier qu'un petit nombre d'usagers est responsable d'un grand nombre d'écoutes de flux alors que la majeure partie est plutôt du côté des écoutes recommandées.
 
 ```{r boxplot_reco, fig.cap = "Distribution de la proportion d'écoutes recommandées par usager"}
 ggplot(us, aes(1, fg)) +
@@ -203,6 +220,8 @@ ggplot(us, aes(1, fg)) +
 
 
 ## Lien entre écoutes recommandées et propriétés socio-démographiques des usagers
+
+Comme pour les écoutes guidées en général, on ne constate pas de lien avec les caractéristiques socio-démographiques.
 
 ```{r scatterplot_fg_socdem, fig.cap="Part d'écoutes recommandées par caractéristiques socio-démographiques"}
 select(us,  fg, age, anciennete_days, revenu_median, population) %>% 
@@ -224,6 +243,8 @@ filter(us, !is.na(gender)) %>%
 
 
 ## Lien entre part d'écoutes guidées et caractéristiques des usagers
+
+Pas de lien clair non plus avec les caractéristiques de l'écoute (là encore, radio, mais trompeur.)
 
 ```{r scatter_fg_carac_usagers, fig.cap = "Part d'écoutes recommandées par caractéristiques d'usages"}
 select(us,  fg, nb_ecoutes, nb_artists, freq_mobile, freq_radio,
@@ -254,6 +275,8 @@ df <- count(st, user_id, genre) %>%
   ungroup()
 
 ```
+
+Pas de lien particulier avec les genres.
 
 ```{r scatter_fg_genres, fig.cap = "Part d'écoutes guidées par part de chaque genre dans la consommation totale"}
 select(df, -user_id) %>% 
@@ -288,85 +311,158 @@ zoib(fg ~ gender + age + anciennete_days + nb_ecoutes + nb_artists | 1, data = u
 
 # Analyse des "outsiders" : les gros usagers d'écoutes guidées
 
+Au lieu d'étudier seulement les taux d'usages des écoutes guidées, on s'intéresse désormais aux usagers "passifs", définit provisoirement comme ceux dont les écoutes sont guidées à plus de 80%. Ils représentent 4.2% de l'échantillon.
+
 ```{r passifs_freq}
 freq(us$passifs) %>% kable()
 ```
+
+## Caractéristiques
+
+Ce sont un peu plus souvent des femmes que dans l'ensemble de l'échantillon (44% contre 37% en moyenne).
 
 ```{r passifs_gender_freq}
 ## Analyse systématique des variables correlées avec passifs ; on ne conserve que celles qui le semblent
 lprop(table(us$passifs, us$gender)) %>% kable()
 ```
+Ils sont un peu plus âgés que la moyenne des utilisateurs.
 
-```{r passifs_nbart_boxplot}
-## Différences dans le nombre d'artistes différents écoutés
-ggplot(us, aes(passifs, nb_artists)) + 
+```{r passifs_age_boxplot, fig.cap = "Âge des utilisateurs passifs"}
+## Un peu plus âgés
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, age)) + 
   geom_boxplot(notch = TRUE)
 
 ```
+
+Ce sont beaucoup plus souvent des usagers de l'offre gratuite (41% contre 15% des usagers en moyenne), au détriment des offres premium et partenaires.
+
+```{r passifs_offer_table}
+lprop(table(us$passifs, us$offer_id)) %>% 
+  kable(caption = "Répartition des usagers 'passifs' par type d'abonnement")
+```
+
+## Dispositifs 
+
+Au sein des écoutes guidées, les usagers passifs sont significativement plus du côté du flux que les autres usagers, même si la médiane demeure à plus de 60% d'écoutes recommandées plutôt que flux ; la dispersion de la variable fréquence de écoutes recommandées vs. flux est beaucoup plus grande que pour les autres usagers, signalant un spectre de modes de guidage utilisés plus large.
+
+```{r passifs_fg_boxplot, fig.cap = "Fréquence d'usage des recommendations vs. flux des utilisateurs passifs"}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, fg)) + 
+  geom_boxplot(notch = TRUE)
+```
+
+Ils utilisent beaucoup moisn le mobile (lié à l'offre limitée?)
+
+```{r passifs_mobile_boxplot, fig.cap = "Fréquence d'usage du mobile des utilisateurs passifs"}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, freq_mobile)) + 
+  geom_boxplot()
+```
+
+Le nombre de dispositifs employés varie peu...
+
+```{r passifs_dispositifs_boxplot, fig.cap = "Nombre de dispositifs utilisés par les utilisateurs passifs"}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, nb_dispositifs)) + 
+  geom_boxplot(notch = TRUE)
+```
+
+Mais la diversité, elle, est beaucoup plus importante, ce qui signifie que, s'ils utilisent autant de dispositifs différents, ils les utilisent plus équitablement que les autres usagers.
+
+```{r passifs_div_dispositifs_boxplot, fig.cap = "Diversité des dispositifs utilisés par les utilisateurs passifs"}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, div_disp)) + 
+  geom_boxplot(notch = TRUE)
+```
+
+Moins de favoris que les autres usagers (ce qui est logique: favoris = écoute de stock = pas d'écoute guidée ; mais là, on mesure le nombre de favoris et non leur usage).
+
+```{r passifs_nbfavorites_boxplot, fig.cap = "Nombre de favoris des utilisateurs passifs"}
+## Par contre, moins de favoris (peut-être variable très discriminante)
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, nb_favorites)) + 
+  geom_boxplot(notch = TRUE) +
+  ylim(0, 100)
+```
+
+## Diversité 
+
+Ils écoutent un nombre significativement plus importannt d'artistes différents.
+
+```{r passifs_nbart_boxplot, fig.cap = "Nombre d'artistes différents écoutés par les utilisateurs passifs"}
+## Différences dans le nombre d'artistes différents écoutés
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, nb_artists)) + 
+  geom_boxplot(notch = TRUE)
+
+```
+
+Alors même qu'ils écoutent en moyenne significativement moins souvent.
+
+```{r passifs_nbecoutes_boxplot, fig.cap = "Nombre d'écoutes des utilisateurs passifs"}
+## Différences dans le nombre d'artistes différents écoutés
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, nb_ecoutes)) + 
+  geom_boxplot(notch = TRUE)
+
+```
+
+La régression confirme que la variété des artistes écoutés (richness) persiste lorsque l'on contrôle le nombre d'écoutes.
 
 ```{r nbart_passifs_lm}
 ## Mais est-elle du à écoutes totales? Il semble que non
 lm(nb_artists ~ nb_ecoutes + passifs, data=us) %>% stargazer(type = "html")
 ```
 
-```{r passifs_offer_table}
-lprop(table(us$passifs, us$offer_id)) %>% kable()
-```
+Ils écoutent significativement moins souvent des artistes stars.
 
-```{r passifs_fg_boxplot}
-ggplot(us, aes(passifs, fg)) + 
+```{r passifs_starart_boxplot, fig.cap = "Ecoutes d'artistes stars des utilisateurs passifs"}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, freq_star_art)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r passifs_mobile_boxplot}
-ggplot(us, aes(passifs, freq_mobile)) + 
-  geom_boxplot()
-```
+Mais on ne voit pas d'écart particulier pour les chansons stars.
 
-```{r passifs_dispositifs_boxplot}
-ggplot(us, aes(passifs, nb_dispositifs)) + 
+```{r passifs_starsng_boxplot, fig.cap = "Ecoutes de chansons stars des utilisateurs passifs"}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, freq_star_sng)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r passifs_starart_boxplot}
-ggplot(us, aes(passifs, freq_star_art)) + 
+Ils écoutent un petit peu plus d'artistes longtail, mais pas significativement plus.
+
+```{r passifs_longtail_boxplot, fig.cap = "Ecoutes d'artistes de la longtail des utilisateurs passifs"}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, freq_longtail_art)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r passifs_starsng_boxplot}
-ggplot(us, aes(passifs, freq_star_sng)) + 
+Surtout, les utilisateurs "passifs" ont une plus grande diversité d'écoute, définie en termes de genres, d'artistes, ou de chansons. (à chaque fois, diversité = inverse de entropie de Shannon)
+
+```{r passifs_div_genres_boxplot, eval=FALSE}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, div_genre)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r passifs_longtail_boxplot}
-ggplot(us, aes(passifs, freq_longtail_art)) + 
+```{r passifs_div_artists_boxplot, eval=FALSE}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, div_artists)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-Surtout, passifs sont plus haut sur toutes les mesures de diversité (mais pas disponibles dans ce doc, il faut aller au doc eclectisme)
-
-```{r passifs_diversity_boxplot, eval=FALSE}
-ggplot(us, aes(passifs, div_herfindahl)) + 
+```{r passifs_div_artists_boxplot, eval=FALSE}
+filter(us, !is.na(passifs)) %>% 
+  ggplot(aes(passifs, div_sng)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-
-```{r passifs_nbfavorites_boxplot}
-## Par contre, moins de favoris (peut-être variable très discriminante)
-ggplot(us, aes(passifs, nb_favorites)) + 
-  geom_boxplot(notch = TRUE) +
-  ylim(0, 100)
-```
-
-
-```{r passifs_age_boxplot}
-## Un peu plus âgés
-ggplot(us, aes(passifs, age)) + 
-  geom_boxplot(notch = TRUE)
-
-```
 
 # Rythme du guidage
+
+La fréquence d'utilisation d'écoutes guidées varie avec l'heure de la journée. elle est la plus faible durant la nuit, la plus forte durant la journée, à 10h et 15h, et décroît légérement entre 10h et 15h, puis entre 15h et 20h.
 
 ```{r rythme_guide, fig.cap = "Rythme horaire des écoutes guidées (vs. écoutes de stock)"}
 group_by(st, wday, hour) %>% 
@@ -377,55 +473,98 @@ group_by(st, wday, hour) %>%
   ylim(0, .4)
 ```
 
+Dela même façon, dans la nuit et dans l'après midi/ la soirée, le guidage est moins employé que le flux.
+
 ```{r rythme_recommande, fig.cap = "Rythme horaire des écoutes recommandées (vs. écoutes de flux)"}
 group_by(st, wday, hour) %>% 
-  summarize(g = sum(type_guid == "Guidage", na.rm=TRUE) / sum(!is.na(type_guid))) %>% 
+  summarize(g = sum(type_guid == "Guidage", na.rm=TRUE) / sum(type_guid %in% c("Flux", "Guidage"))) %>% 
   ggplot(aes(x = hour, y = g, color = wday)) +
   geom_line() +
   geom_point() +
-  ylim(0, .2)
+  ylim(0, .7)
 ```
 
 
 # Analyse multivariée des dispositifs de recommandation
 
+## Travailler sur les dispositifs "brut"
+
+On supprime les écoutes unknown et ND.
+
+Les écoutes de stock sont moins nombreuses pour les abonnés gratuits (limites au stock?) et premium plus ; par contre, artist disco plus utilisé. Top plus utilisé aussi, ainsi que smart radio.
+
+```{r context_X_offer_id}
+x <- filter(st, !(context_cat %in% c("unknown", "ND")), !is.na(context_cat))
+cprop(table(x$context_cat, x$offer_id)) %>% 
+  kable(caption = "Dispositif par type d'offre", digits = 1)
+
+```
+
+Les écoutes mobiles sont beaucoup plus souvent des écoutes de stock, puis de feed radio, feed playlist, search, artist top. Comparativement, les écoutes desktop sont plus souvent artist disco, feed, top.
+
+```{r context_X_app_type}
+cprop(table(x$context_cat, x$app_type)) %>% 
+  kable(caption = "Dispositif par type d'application employée", digits = 1)
+```
+
+Les nouveautés sont plus souvent écoutés via explore release, experts editor, top, 
+
+```{r nouveaute_dispositif}
+table(x$context_cat, x$nouveaute) %>% 
+  lprop() %>% 
+  kable(caption = "Dispositif par nouveauté", digits = 1)
+```
+
+
 ## Association entre dispositifs, à partir des co-usagers
 
+On calcule pour chaque usager le nombre d'usage de chaque dispositif et l'on regarde les associations entre ces dispositifs.
+
+On trouve peu de corrélations, et surtout entre des dispositifs proches (feed en particulier)
+
 ```{r corr_matrix, fig.cap = "Matrice des corrélation entre dispositifs"}
-df <- count(st, user_id, context_cat) %>% 
+df <- count(x, user_id, context_cat) %>% 
   filter(!is.na(context_cat)) %>% 
   spread(context_cat, n, fill = 0)
 
-ggcorr(df[, -1], nbreaks = 5)
+ggcorr(df[, -1], nbreaks = 5, label = TRUE)
 
 ```
 
-```{r pca_dispositifs, eval = FALSE}
+Une analyse des correspondance fait ressortir un seul axe, qui oppose principalement l'usage au non-usage.
+
+```{r pca_dispositifs}
 dpca <- PCA(df[, -1], graph = FALSE)  
-# plot(dpca$eig$`percentage of variance`)
+fviz_eig(dpca)
 ```
 
-
-```{r pca_varplot, eval = FALSE}
-plot.PCA(dpca, choix = "var")
+```{r pca_varplot}
+fviz_pca_var(dpca) + coord_fixed()
 ```
 
 ## Association entre dispositifs, à partir des artistes
 
+Regardons désormais à partir des artistes. Cette fois, on calcule le nombre d'écoute de chaque artiste par chaque dispositif et l'on regarde s'il existe des associations entre les dispositifs. On retrouve des corrélations fortes entre :
+
++ top et stock
++ artist_top et top/stock
++ artist_top et feed_radio/feed_playlist/search
++ feed_radio avec radio_flow, searck, stock
++ feed_playlist avec radio_flow
+
 ```{r corr_matrix_art, fig.cap = "Matrice des corrélation entre dispositifs, à partir des artistes"}
-df <- count(st, art_id, context_cat) %>% 
+df <- count(x, art_id, context_cat) %>% 
   filter(!is.na(context_cat)) %>% 
   spread(context_cat, n, fill = 0)
-
 
 ggcorr(df[, -1], nbreaks = 5)
 
 ```
 
-En restreignant aux artistes les plus écoutés (exclu la long tail)
+En restreignant aux artistes les plus écoutés (exclu la long tail).
 
 ```{r corr_matrix_art_ecoutes, fig.cap = "Matrice des corrélation entre dispositifs, à partir des artistes"}
-df <- filter(st, art_pop != "Long tail") %>% 
+df <- filter(x, art_pop != "Long tail") %>% 
   count(art_id, context_cat) %>% 
   filter(!is.na(context_cat)) %>% 
   spread(context_cat, n, fill = 0)
@@ -437,13 +576,14 @@ ggcorr(df[, -1], nbreaks = 5)
 
 # Au niveau des pistes écoutées
 
+On étudie désormais l'usage des recommendation non plus au niveau agrégé des individus, mais au niveau désagrégé des écoutes.
+
 ```{r freq_st_guid}
-freq(st$guid) %>% kable(caption = "Distribution des écoutes par usage de dispositif")
+freq(st$guid) %>% 
+  kable(caption = "Distribution des écoutes par usage de dispositif")
 ```
 
 ## Guidage par genre
-
-On revient ici aux données des tracks: il s'agit de savoir, dans chaque genre, quel est la proportion d'écoutes guidées.
 
 ```{r genre_guid, fig.cap = "Part de pistes écoutées suite à du guidage, par genre écouté"}
 count(st, genre, guid) %>% 
@@ -489,7 +629,9 @@ En matière de formes de guidages, les écarts absolus sont aussi important. Cet
 
 ## Guidage par popularité
 
-```{r guid_artpop_boxplot}
+Les artistes de la long tail sont plus susceptibles d'être écoutés via du guidage que les artistes star.
+
+```{r guid_artpop_boxplot, fig.cap = "Ecoutes guidées par popularité des artistes"}
 count(st, art_pop, guid) %>% 
   filter(!is.na(guid)) %>% 
   group_by(art_pop) %>% 
@@ -504,7 +646,9 @@ count(st, art_pop, guid) %>%
   
 ```
 
-```{r guid_sngpop_boxplot}
+Pour les chansons individuelles, par contre, ça n'est pas le cas: les chansons stars sont légèrement plus susceptibles d'être issues du guidage que les chansons de la long tail.
+
+```{r guid_sngpop_boxplot, fig.cap = "Ecoutes guidées par popularité des chansons"}
 count(st, sng_pop, guid) %>% 
   filter(!is.na(guid)) %>% 
   group_by(sng_pop) %>% 
@@ -521,7 +665,9 @@ count(st, sng_pop, guid) %>%
 
 ## Flux/recommandation par popularité
 
-```{r typeguid_artpop_boxplot}
+Si l'on étudie le type de guidage, on constate que les artistes stars sont plus susceptibles d'être recommandés (vs. flux)
+
+```{r typeguid_artpop_boxplot, fig.cap = "Ecoutes recommandées par popularité des artistes"}
 count(st, art_pop, type_guid) %>% 
   filter(type_guid != "Non guidée") %>% 
   group_by(art_pop) %>% 
@@ -536,7 +682,9 @@ count(st, art_pop, type_guid) %>%
   
 ```
 
-```{r typeguid_sngpop_boxplot}
+De même pour les pistes stars
+
+```{r typeguid_sngpop_boxplot, fig.cap = "Ecoutes recommandées par popularité des chansons"}
 count(st, sng_pop, type_guid) %>% 
   filter(type_guid != "Non guidée") %>% 
   group_by(sng_pop) %>% 
@@ -553,7 +701,9 @@ count(st, sng_pop, type_guid) %>%
 
 ## Guidage par type d'abonnement
 
-```{r guid_offerid_boxplot}
+On retrouve à ce niveau les résultats agrégés sur le lien entre offre employée et part d'écoute guidées, les abonnements free et premium plus faisant plus souvent l'objet de guidages.
+
+```{r guid_offerid_boxplot, fig.cap = "Ecoutes guidées par type d'abonnement"}
 count(st, offer_id, guid) %>%
   filter(!is.na(guid)) %>% 
   group_by(offer_id) %>% 
@@ -563,13 +713,16 @@ count(st, offer_id, guid) %>%
   ggplot(aes(offer_id, f)) + 
     geom_col() +
     theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
-    labs(y = "Part d'écoute guidées", x = "Popularité de l'artiste") +
+    labs(y = "Part d'écoute guidées", x = "Type d'abonnement utilisé") +
     ylim(0, 0.5)
 
 ```
 
 ## Flux/reco par type d'abonnement
-```{r typeguid_offerid_boxplot}
+
+On ne voit par contre pas d'écart marquant au niveau du type de recommandation.
+
+```{r typeguid_offerid_boxplot, , fig.cap = "Ecoutes recommandées par type d'abonnement"}
 count(st, offer_id, type_guid) %>% 
   filter(type_guid != "Non guidée") %>% 
   group_by(offer_id) %>% 
@@ -584,24 +737,24 @@ count(st, offer_id, type_guid) %>%
 
 ```
 
-
-## Durée d'écoute par guidage
-
-```{r guid_length_boxplot, fig.cap = "Temps d'écoute par guidage"}
-ggplot(filter(st, length < 1000), aes(guid, length)) +
+```{r guid_length_boxplot, fig.cap = "Temps d'écoute par guidage", eval=FALSE}
+filter(st, !is.na(guid), duration < 1000) %>% 
+  ggplot(aes(guid, duration)) +
   geom_boxplot(notch= TRUE) +
   labs(x = "Guidage", y = "Temps d'écoute en secondes")
 ```
 
-```{r typeguid_length_boxplot, fig.cap = "Temps d'écoute par type de guidage"}
-ggplot(filter(st, length < 1000), aes(type_guid, length)) +
+```{r typeguid_length_boxplot, fig.cap = "Temps d'écoute par type de guidage", eval=FALSE}
+ggplot(filter(st, duration < 1000), aes(type_guid, duration)) +
   geom_boxplot(notch= TRUE) +
   labs(x = "Type de guidage", y = "Temps d'écoute en secondes")
 ```
 
 ## Guidage par support d'écoute
 
-```{r guid_apptype_boxplot}
+Les écoutes réalisés sur desktop sont significativement plus souvent guidées que les écoutes réalisées sur mobile.
+
+```{r guid_apptype_boxplot, fig.cap = "Usage des recommandations par type de support"}
 count(st, app_type, guid) %>% 
   filter(!is.na(guid)) %>% 
   group_by(app_type) %>% 
@@ -615,6 +768,7 @@ count(st, app_type, guid) %>%
     ylim(0, 0.5)
 ```
 
+En ce qui concerne le type de guidage, desktop et mobile diffèrent peu ; par contre, on trouve plus de flux sur tablette et plus de recommandations sur web (même s'il faut se méfier, puisque ces deux supports sont très rarement employés).
 
 ```{r typeguid_apptype_boxplot}
 count(st, app_type, type_guid) %>% 

@@ -12,8 +12,19 @@ opts_chunk$set(echo = FALSE,
 
 ```
 
-```{r data}
+```{r packages}
+library("tidyverse")
+library("broom")
+library("questionr")
+# load lubridate before here (function conflict)
+library("lubridate")
 library(here)
+library(GGally)
+# Options
+theme_set(theme_bw())
+```
+
+```{r data}
 load(here("data", "streams.RData"))
 load(here("data", "french_users.RData"))
 load(here("data", "songs_artists.RData"))
@@ -21,19 +32,13 @@ load(here("data", "songs_artists.RData"))
 
 Ce document comporte une réplication des analyses du chapitre 6 de la thèse de Sisley Maillard
 
-```{r packages}
-library("tidyverse")
-library("lubridate")
-library("broom")
-library("questionr")
-
-# Options
-theme_set(theme_bw())
-```
 
 # Description du dataset
 
 ## Description des usagers
+
+On ne refait pas l'analyse des pays dans lesquels sont écoutés les pistes, peu intéressantes (usagers français => minorité d'écoutes dans d'autres pays, sans doute liées aux vacances [dataset inclut la période d'été] et déplacements).
+
 ```{r distribution_pays}
 # Supprimé pour gagner de la mémoire
 #factor(st$country == "FR", levels = c(TRUE, FALSE), labels = c("France", "Another country")) %>% 
@@ -41,6 +46,9 @@ theme_set(theme_bw())
 #  kable(caption = "Distribution des écoutes par pays")
 ```
 
+Les données concernant les villes ne sont pas de très bonne qualité, avec 1/4 de données manquantes, et un champ ouvert, sans recodage proposé, dont on peut penser qu'il provient d'une auto-déclaration (sur un compte Facebook lié au compte Deezer sans doute). Il est possible que les parisiens soient donc surreprésentés (tendances de banlieue à affirmer Paris).
+
+Ainsi, nous avons près de 14% de Parisiens dans les personnes pour lesquelles on dispose de la ville (alors que Paris rassemble seulement 3.4% de la population française ; l'IDF 18.8% de la population française [recensement 2014]).
 
 ```{r villes}
 ## Trop grossier ; commencer par recoder/nettoyer les villes.
@@ -55,37 +63,49 @@ freq(city_r) %>% kable(caption = "Distribution des usagers par ville")
 rm(city_r)
 ```
 
+Les usagers apparaîssent relativement plus concentrés dans des zones urbaines que la population française dans son ensemble, avec 73% des renseignés (eux même 70% des usagers) habitant dans une commune d'un grand pôle urbain (contre 59.2% de la population française [@brutel2011_Lenouveauzonage]). Là encore, cependant, la sous-déclaration de la commune ne permet pas de conclure précisément.
 
-
-```{r age_hist, fig.cap = "Distribution de l'âge des utilisateurs"}
-filter(us, age < 90 ) %>% ggplot(aes(x = age, y = ..density..)) + geom_histogram()
+```{r aires_urbaines_freq}
+freq(us$AUR, cum = TRUE) %>% kable(caption = "Distribution par zone urbaine")
 ```
 
-
+L'âge est aussi mal renseigné que la commune (1106 valeurs manquantes, soit 28% de l'échantillon). L'échantillon apparaît cependant très jeune, et même en considérant que les personnes les plus âgés auraient une tendance à sous-déclarer leur âge (ce que rien ne laisse à penser), significativement plus bas que la population en moyenne. On a ainsi une médiane à 28 ans et un moyenne à 30.7 ans. Un quart des usagers de l'échantillon a moins de 21 ans (et 10% 18 ans ou moins). Seulement un quart a plus de 37 ans.
 
 ```{r age_distr}
 summary(us$age) %>% tidy() %>% kable(caption = "Distribution de l'âge")
 ```
 
+```{r age_hist, fig.cap = "Distribution de l'âge des utilisateurs"}
+filter(us, age < 90 ) %>% ggplot(aes(x = age, y = ..density..)) + geom_histogram()
+```
 
 ```{r age_distr_quantile}
 quantile(us$age, na.rm = TRUE, probs = seq(0, 1, .1)) %>% tidy() %>% kable(caption = "Quantiles de la distribution de l'âge")
 ```
 
+Le genre, par contre, est bien renseigné, avec seulement 5 valeurs manquantes. Les hommes constituent près des 2/3 de l'échantillon (63%).
 
 ```{r tri_plat_genre}
-freq(us$gender, exclude = NA) %>% kable(caption = "Distribution du genre")
+freq(us$gender) %>% kable(caption = "Distribution du genre")
 ```
 
+Il n'y a pas de différence d'âge significatives entre hommes et femmes.
 
+```{r age_genre}
+ggplot(us, aes(gender, age)) +
+  geom_boxplot(notch = TRUE)
+```
+
+Enfin, les usagers sont plutôt uniformément répartis en termes d'ancienneté de leur inscription. Les nouveaux utilisateurs, inscrits dans la semaine de l'échantillonage, constituent 1.7% de l'échantillon, un chiffre élevé qui suggère un fort turnover. Environ 1/4 est constitué de nouveaux entrants (inscrits l'année précedente), le reste d'usagers de plus longue durée.
 
 ```{r TP_date_inscription}
 freq(us$anciennete_cat, cum = TRUE, exclude = NA) %>% 
   kable(caption = "Distribution des usagers par date d'inscription")
-
 ```
 
 ## Description des supports d'écoute
+
+Le téléphone portable apparaît clairement comme le support privilégié de l'écoute, étant près de trois fois plus souvent utilisé que le desktop. Les applications web et les tablettes sont marginales.
 
 ```{r tri_plat_supports, fig.cap = "Distribution des écoutes par support (nombre d'écoute)"}
 df <- count(st, app_type)
@@ -97,7 +117,21 @@ ggplot(df, aes(x = app_type, y = f)) +
   labs(x = "Fréquence", y = "Support")
 ```
 
+Si l'on considère le temps cumulé passé sur chacun des supports, la domination du mobile s'érode légérement : il est alors "seulement" un peu moins de deux fois plus représentés que le desktop (dont les usages sont donc plus long en moyenne). Il reste largement dominant. Tablettes et web demeurent marginaux.
 
+```{r tri_plat_usage_support_temps, fig.cap = "Distribution des supports employés (en temps cumulé)"}
+df <- group_by(st, app_type) %>% 
+  summarize(t = sum(as.numeric(length), na.rm = TRUE)) %>% 
+  filter(!is.na(app_type)) %>% 
+  mutate(f = t / sum(t) * 100)
+
+ggplot(df, aes(x = app_type, y = f)) + 
+  geom_col() +
+  coord_flip() +
+  labs(x = "Fréquence", y = "Support")
+```
+
+Pourtant, l'appli web a été utilisée aau moins une fois par 35% des usagers environ (moins de 10% pour la tablette). 70% ont employés au moins une fois le desktop, 80% le mobile.
 
 ```{r tri_plat_supports_usagers, fig.cap = "Distribution des supports employés au moins une fois (total supérieur à 100%)"}
 df <- count(st, app_type, user_id) %>% 
@@ -112,31 +146,35 @@ ggplot(df, aes(x = app_type, y = f)) +
 
 ```
 
+Les usages du mobile sont largement exclusifs : si on l'utilise, il y a de fortes chances que ce soit tout le temps ; si on l'utilise peu, que ce soit jamais.
 
-
-```{r tri_plat_usage_support_temps, fig.cap = "Distribution des supports employés (en temps cumulé)"}
-df <- group_by(st, app_type) %>% 
-  summarize(t = sum(as.numeric(length), na.rm = TRUE)) %>% 
-  filter(!is.na(app_type)) %>% 
-  mutate(f = t / sum(t) * 100)
-
-ggplot(df, aes(x = app_type, y = f)) + 
-  geom_col() +
-  coord_flip() +
-  labs(x = "Fréquence", y = "Support")
+```{r freq_mobile_hist}
+ggplot(us, aes(freq_mobile)) + geom_histogram()
 ```
 
+L'offre gratuite est très minoritaire (17.5% des usagers). Plus de 4/5 usagers payent donc directement pour le service. Au total, 50% sont abonnés à l'offre partenaire, principalement, semble-t-il, via l'abonnement orange.
 
-
-```{r ri_plat_type_abo}
+```{r tri_plat_type_abo}
 freq(us$offer_id) %>%  kable(caption = "Distribution des types d'offre employés")
 ```
 
+Il n'y a pas de différence significative d'âge entre les abonnés gratuits, premium et partenaire. Par contre, les premium + hors partenaires sont sensiblement plus âgés, avec une médiane à 41 ans contre autour de 28 pour les trois autres catégories. Sisley Maillard ne distingue pas offre partenaire et offre premium+ dans sa thèse. En tous cas, alors que l'on aurait pu penser que l'offre orange aurait vieilli l'âge des utilisateurs (en amenant des personnes ne connaissant pas Deezer), il semble que ce soit en fait l'offre la plus chère qui produit cela. Cependant, le nombre d'abonnements premium+ est assez faible (142, 3.6% de l'échantillon).
 
-```{r tri_source_ecoute}
-freq(st$app_type) %>% kable(caption = "Distribution des terminaux employés")
+```{r offerid_age_boxplot}
+ggplot(filter(us, !is.na(offer_id)), aes(offer_id, age)) + 
+  geom_boxplot(notch = TRUE)
+#tapply(us$age, us$offer_id, median, na.rm=TRUE)
 ```
 
+Les femmes sont légèrement plus représentées parmi la population des usagers de l'offre gratuite (46%, contre 37% de l'échantillon total).
+
+```{r offerid_age_boxplot}
+ggplot(filter(us, !is.na(offer_id)), aes(offer_id, fill=gender)) + 
+  geom_bar(position="fill")
+#tapply(us$gender, us$offer_id, freq)
+```
+
+Le tableau suivant reste à expliquer. L'offre mobile n'était, normalement, pas disponible pour les usagers gratuits -- elle est pourtant, faiblement, utilisée. L'usage prédominant du desktop pour les usagers premium+ est également étonnant. Il faudrait faire l'archéologie des offres de Deezer pour comprendre...
 
 ```{r supportXabonnement}
 cprop(table(st$app_type, st$offer_id)) %>% kable(caption = "Plateformes d'écoutes par type d'abonnement (base = toutes les écoutes)")
@@ -148,12 +186,30 @@ Manque ici: hors connexion et usage des recommandations.
 
 ## Durée d'écoute des titres
 
+Un quart des écoutes durent moins de trente secondes (= zapping).
+
 ```{r duree_ecoute}
-freq(factor(st$length > 30, levels = c(FALSE, TRUE), labels = c("Moins de 30 secondes", "Plus de 30 secondes"))) %>%
-  kable(caption = "Part des écoutes supérieures à 30 secondes")
+x <- factor(st$length > 30, levels = c(FALSE, TRUE), labels = c("Moins de 30 secondes", "Plus de 30 secondes"))
+freq(x) %>%
+  kable(caption = "Part des écoutes supérieures à 30 secondes", digits = 1)
 # très divergent avec Sisley. pas la bonne variable?
 ```
 
+Le zapping est beaucoup plus fréquent sur mobile que sur desktop (un peu plus de deux fois plus, de 14.6% à 34%).
+
+```{r zappingXapps}
+lprop(table(st$app_type, x)) %>% kable(caption = "Zapping par type d'application", digits = 1)
+```
+
+Il est également plus fréquent parmi les écoutes via offre premium ou partenaire que via les autres.
+
+```{r zappingXoffer}
+lprop(table(st$offer_id, x)) %>% kable(caption = "Zapping par type d'application", digits = 1)
+```
+
+## Distribution des écoutes
+
+On s'intéresse aux titres écoutés plus de 30 secondes. La distribution apparaît très fortement concentrée: peu de titres sont écoutés souvent, la grande majorité est écoutée peu de fois.
 
 ```{r nb_titres_ecoute_longtemps}
 # Part des titres écoutés au moins une fois plus de trente secondes.
@@ -173,7 +229,7 @@ group_by(st, sng_id) %>%
     scale_x_log10()
 ```
 
-
+On constate que la distribution des écoutes suit approximativement une loi de pareto sur le graphique log x log.
 
 ```{r titre_plus_ecoute, fig.cap = "Distribution du nombre d'écoute (log x log)"}
 df <- count(st, sng_id) %>% 
@@ -198,12 +254,49 @@ count(st, art_id) %>%
   kable(caption = "Artistes les plus écoutés")
 ```
 
+Les nouveautés (ici, > 2013, donc parue jusqu'à il y un peu plus d'un an avant le début de la période concernée) constituent environ 40% des écoutes, et semblent donc relativement dominante par rapport à leur part dans le catalogue (1/4 des pistes).
 
-```{r nouveauteecoute}
-freq(st$nouveaute) %>% kable(caption = "Fréquence d'écoute des nouveautés")
+```{r ecoutes_nouveaute_freq}
+freq_count <- function(x){
+  round((x / sum(x))*100, 1)
+}
+
+count(st, nouveaute) %>% 
+  full_join(count(so, nouveaute), by = "nouveaute") %>% 
+  mutate(f_ecoutes = freq_count(n.x), 
+         f_catalogue = freq_count(n.y)) %>% 
+  select(nouveaute, 
+         n_ecoutes = n.x,
+         f_ecoutes,
+         n_catalogue = n.y,
+         f_catalogue) %>% 
+  kable(caption = "Distribution des nouveautés parmi les pistes écoutées et parmi les pistes du catalogue")
 ```
 
+En ce qui concerne les pistes qui ne sont pas des nouveauté, les périodes de parution coïncident à peu près avec les chansons du catalogue. Nos résultats s'écartent cependant de ceux de Sisley ici.
+
+```{r ecoutes_hors_nouveaute}
+filter(st, nouveaute == "Pas une nouveauté") %>% 
+  mutate(periode = cut(release_year, breaks = c(1900, 1980, 1990, 2000, 2010, 2020), labels = c("Avant 1980", paste0("Années ", seq(1980L, 2010L, by = 10L))))) %>% 
+  count(periode) %>% 
+  left_join(filter(so, nouveaute == "Pas une nouveauté") %>% 
+              mutate(periode = cut(release_year, breaks = c(1900, 1980, 1990, 2000, 2010, 2020), labels = c("Avant 1980", paste0("Années ", seq(1980L, 2010L, by = 10L))))) %>% 
+              count(periode), 
+            by = "periode") %>% 
+    mutate(f_ecoutes = freq_count(n.x), 
+         f_catalogue = freq_count(n.y)) %>% 
+  select(periode, 
+         n_ecoutes = n.x,
+         f_ecoutes,
+         n_catalogue = n.y,
+         f_catalogue) %>% 
+  kable(caption = "Distribution des périodes de parution des pistes hors nouveauté, dans les écoutes et dans le catalogue")
+```
+
+
 ### Saisonnalité des écoutes
+
+On laisse ce diagramme, qui était dans la thèse, des écoutes par semaine de l'expérience, mais il paraît peu convaincant, à part pour dire que les gens écoutent sans doute moins en vacances... Peut-être permettrait-il de faire l'hypothèse d'une forte discontinuité de l'écoute, expliquant pourquoi en suivant des gens qui ont écoutés une semaine, on a une forte attrition (ils sont remplacés par d'autres qui n'ont pas écouté cette semaine là ?).
 
 ```{r ecoutes_par_semaine, fig.cap = "Distribution des écoutes par semaine"}
 ggplot(st, aes(x = week)) + 
@@ -213,27 +306,47 @@ ggplot(st, aes(x = week)) +
 ## Changer ylim
 ```
 
+La distribution par heure est plus intéressante. On remarque d'abord, ce qui paraît aller de soi, que l'écoute varie beaucoup dans la journée. Elle trouve son point le plus faible vers 5h du matin et son pic autour de 17h30. Il y a en fait un plateau de 10h à 18h, précédé d'une montée rapide depuis 5h, et suivi d'un déclin lent.
 
+L'écoute se fait donc principalement durant les heures de travail, dans la journée, puis le soir, et enfin le matin.
 
 ```{r ecoutes_par_jour_heure, fig.cap = "Distribution des écoutes par heure et par jour"}
 ggplot(st, aes(x = hour, linetype = wday, colour = wday)) + 
   geom_line(stat = "count") +
   ylim(0, 175000)
-  
-## changer ylim
+```
+
+Le pic de fin d'après midi s'atténue le week-end, pas parce que l'on écoute moins à cette heure là, mais parce que l'on écoute plus avant, durant l'après-midi ; le plateau y est beaucoup plus clair. L'écoute dans la nuit est également plus importante : deux fois plus de pistes sont écoutées à minuit que les jours de semaine (minuit, ici, égal 0h du matin le samedi ou dimanche, donc les nuit du vendredi et du samedi), et c'est encore le cas à 2h30 du matin.
+
+Dans la figure suivante, les effectifs sont employés, mais ils sont rapportés au nombre de jours : les effectifs de semaine divisés par 5 et les effectifs du week-end divisés par 2.
+
+```{r ecoutes_par_wkend_semaine, fig.cap = "Distribution des écoutes par heure et par week-end/semaine"}
+df <- mutate(st, wk = factor(wday %in% c("Sat", "Sun"), levels = c(TRUE, FALSE), labels = c("Week-end", "Semaine"))) %>% 
+  count(hour, wk)
+df <- mutate(df, n = ifelse(wk == "Semaine", n/7, n/2))
+ggplot(df, aes(x = hour, colour = wk, y = n)) + 
+  geom_line(stat = "identity") +
+  ylim(0, 160000)
 ```
 
 ### Volume d'écoute totale
+
+Le volume global d'écoutes, nombre de pistes écoutés sur l'ensemble de la période, est très concentré. Demande peut-être un ajustement global : retirer certains usagers et leurs pistes ?
+
+Quoi qu'il en soit, lorsque l'on étudie l'ensemble de l'échantillon, la moyenne du nombre de pistes étudiées est 1.5 fois plus importante que la médiane (4489 de moyenne, médiane à 2887), ce qui indique qu'elle est tirée vers le haut par de forts usagers, et l'écart-type (5101) est supérieur à la moyenne, ce qui indique une très forte dispersion
 
 ```{r volume_ecoute_histogramme, fig.cap = "Distribution du volume total d'écoute"}
 count(st, user_id) %>% 
   ggplot(aes(x = n)) +
     geom_histogram()
-
 ```
 
+```{r volume_ecoute_boxplot, fig.cap = "Distribution du volume total d'écoute"}
+count(st, user_id) %>% 
+  ggplot(aes(1, n)) +
+    geom_boxplot()
 
-
+```
 
 ```{r volume_ecoute_summary}
 count(st, user_id) %>% 
@@ -243,7 +356,7 @@ count(st, user_id) %>%
   kable(caption = "Distribution du nombre d'écoutes sur les cinq mois")
 ```
 
-
+On constate des variations similaires dans la durée d'écoute par jour et dans le nombre de pistes écoutées par jour, sans surprise.
 
 ```{r summary_volume}
 group_by(st, user_id) %>% 
@@ -258,8 +371,7 @@ group_by(st, user_id) %>%
   kable(caption = "Résumé des variables de fréquence d'écoute")
 ```
 
-
-
+Le volume d'écoutes varie considérablement avec le type d'offre employé. Les usagers d'abonnements gratuits emploient beaucoup moins la plateforme, quelle que soit la métrique retenue.
 
 ```{r summary_volume_premium}
 mutate(st, offer_id = ifelse(offer_id == "Free", "Gratuit", "Premium")) %>% 
@@ -284,6 +396,7 @@ mutate(st, offer_id = ifelse(offer_id == "Free", "Gratuit", "Premium")) %>%
 
 ## Diversité de la consommation
 
+Environ la moitié des artistes ne sont écoutés que par un seul usager, témoignant de la grande concentration des écoutes, qui ne fait que corroborer ce que l'on a vu précédemment avec la distribution du nombre d'écoute par piste.
 
 ```{r artiste_solitaires}
 ## Artistes écoutés par un seul individu
@@ -294,17 +407,7 @@ group_by(st, art_id) %>%
   kable(caption = "Artistes écoutés par un seul usager")
 ```
 
-
-
-```{r nombre_artistes_perdiem, fig.cap = "Nombre d'artistes différents écoutés par jour", eval=FALSE}
-count(st, yday, art_id) %>% 
-  summarise(n = n()) %>% 
-  ggplot(aes(x = yday, y = n)) +
-    geom_point() +
-    geom_line()
-
-```
-
+La diversité est compliquée à mesurer (cf travaux dans Algodiv). Une première mesure est la richness : le nombre d'obets différents consommés. Les médianes sont ici à 265 artistes différents et 749 pistes différentes écoutées sur la durée.
 
 ```{r diversite_ecoute}
 # variété individuelle
@@ -319,62 +422,103 @@ group_by(st, user_id) %>%
 
 ```
 
+On peut cependant prendre en compte également le nombre d'écoutes de chaque artiste, c'est à dire pondérer par le fait que, si on écoute une fois les Beatles et 100 fois les Stones, la diversité ne devrait peut-être pas être de 2, mais plutôt de 1.1 (un peu plus que 1 parce que pas un seul artiste, mais loin de deux).
+
+On emploie pour cela l'inverse de l'entropie de Shannon, mesure produite par les collègues du LIP6 qui a comme intérêt de valoir entre 0 et n où n = nombre total de choix (ici d'artistes, ou de pistes). La diversité vaudra n, le maximum, lorsque 1. la personne écoute tous les artistes présents dans le catalogue et 2. chaque artiste est écouté exactement le même nombre de fois. Par définition, elle sera inférieur (ou égale si [2]) à la richness, mais aura la même échelle (même maximum théorique).
+
+Les maximums théoriques (nombre d'artistes / de pistes différents) sont : `r length(unique(st$art_id))` artistes et `r length(unique(st$sng_id))` pistes. On en est évidemment loin (mais ces maximums sont arbitraires).
+
+```{r diversite_ecoute_shannon}
+select(us, starts_with("div_")) %>% 
+  gather(key, value) %>% 
+  filter(!is.na(value)) %>% 
+  group_by(key) %>% 
+  summarize_all(funs(length, min, max, mean, median, sd)) %>% 
+  kable()
+
+```
+
 ## Corrélations de diversité
 
+On a enlevé dans le diagramme suivant les variables sans corrélation avec d'autres ; il y a plus de variables que dans la thèse de SM. 
 
-```{r}
-## df avec diversité par usager
-df <- group_by(st, user_id) %>% 
-  summarise(nb_tracks = n_distinct(sng_id),
-            nb_artists = n_distinct(art_id),
-            volume_ecoute = sum(length), 
-            freq_mobile = sum(app_type == "mobile", na.rm = TRUE)/n(),
-            freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / n(),
-            nb_dispositifs = n_distinct(context_cat), 
-            freq_star = sum(sng_pop == "Star", na.rm = TRUE) / n(),
-            freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
-  right_join(us)
-```
+Les corrélations les plus fortes le sont par construction, et n'ont pas de sens :
 
++ entre nb artiste/nb tracks et div_artistes/div_sng: deux indicateurs de diversité  (richness et Shannon entropy) ; idem entre diversité tracks (nb tracks/div_sng) et diversité artistes : plus on écoute d'artistes, plus on écoute de pistes
++ entre freq_star_art et freq_star_sng: pas étonnant que les chansons stars soient celles des artistes stars
++ inversement, corrélation négative entre freq_star/freq_longtail (opposé par définition)
 
-```{r corr_diversite_intensite}
+Notons que, vu la répartition des variables, les coefficients de corrélation linéaire ne sont sans doute pas les meilleurs descripteurs des relations entre elles.
 
-select(df, nb_tracks, nb_artists, volume_ecoute) %>% 
-  cor(use = "complete.obs") %>% 
-  kable(caption = "Corrélations entre diversité des artistes, diversité des pistes, et volume global d'écoute")
-```
+Association entre frequence d'écoute des nouveauté et fréquence d'écoute des star: parce que pistes et artistes stars sont surtout les nouveaux.
 
+Age corrélé négativement avec écoute de star, positivement, faiblement, avec écoute de longtail.
 
+Nombre de dispositifs employé est corrélé positivement avec la diversité (artistes, song, égalment richness) et avec le volume et le nombre total d'écoute (donc l'intensité de l'usage)
 
-```{r corr_diversite}
-mutate(df, inscr = as.numeric(ymd("20140407") - date_registered)) %>% 
-  select(nb_tracks, nb_artists, volume_ecoute, age, inscr, freq_mobile, freq_radio, nb_dispositifs, freq_star, freq_nouveaute) %>%   
-  cor(use = "complete.obs") %>% 
-  kable(caption = "Corrélation entre diversité de l'écoute et variables indépendantes")
+La fréquence d'usage des recommendations algo n'est pas liée (0) au nombre ou au colum d'écoute, ni à la fréquence des artistes stars ou longtail... (mais attention: pas du tout linéaire).
 
+La diversité des dispositifs n'est pas liée (0) à nombre d'écoute ou volume d'écoute.
 
-```
-
-```{r corr_diversite_matrix}
-source("https://raw.githubusercontent.com/briatte/ggcorr/master/ggcorr.R")
-mutate(df, inscr = as.numeric(ymd("20140407") - date_registered)) %>% 
-  select(nb_tracks, nb_artists, volume_ecoute, age, inscr, freq_mobile, freq_radio, nb_dispositifs, freq_star, freq_nouveaute) %>% 
-  ggcorr()
+```{r corr_diversite_heatmap, fig.cap = "Heatmap des corrélations entre les variables numériques de la base de données usagers"}
+select_if(us, is.numeric) %>% 
+  select(-population, -surface, -lat, -long, -score, -revenu_median, -freq_mobile, -freq_desktop, -fg) %>% 
+  ggcorr(label = TRUE, digits = 3)
 ```
 
 ## Popularité
 
-```{r distribution_pop_artistes}
+Nous avons refait les définitions de la popularité des artistes et des chansons par rapport à la thèse de Sisley. Les quatre modalités (contre trois auparavant) sont définies ainsi:
+
++ star: la chanson ou l'artiste est dans les 0.1% les plus écoutés
++ higher-midtail: la chanson ou l'artiste est dans les 0.1% à 1% les plus écoutés
++ lower-midtail: la chanson ou l'artiste est dans les 1% à 5% les plus écoutés
++ longtail: la chanson ou l'artiste est dans les 95% les moins écoutés
+
+Les valeurs seuils sont désormais les suivantes. Elles sont considérablement moins élevées pour une chanson.
+
+```{r seuil_popularite}
+count(st, sng_id, sng_pop) %>% 
+  group_by(sng_pop) %>% 
+  arrange(n) %>% 
+  slice(1) %>% 
+  select(-sng_id, seuil_piste = n, popularite = sng_pop) %>% 
+  left_join(count(st, art_id, art_pop) %>% 
+              group_by(art_pop) %>% 
+              arrange(n) %>% 
+              slice(1) %>% 
+              select(-art_id, seuil_artiste = n, popularite = art_pop)) %>% 
+  kable(caption = "Nombre d'écoutes nécessaire pour qu'un artiste ou une chanson appartienne à une catégorie de popularité")
+  
+```
+
+Les deux métriques sont très liées, mécaniquement. Les deux tiers des chansons stars sont le fait d'artistes star, alors que ceux-ci constitue 2.4% des auteurs des chansons présentes. Remarquons cependant qu'il y a dans la métrique de la popularité des artistes un biais : 0.1% de la population d'artistes, mais 2.5% de la population des chansons, ce qui semble indiquer que les plus populaires le sont parce qu'ils sont les plus prolifiques.
+
+(=> il y a peut-être quelque chose à changer dans la définition de ces variables... Peut-être en pondérant par le nombre de pistes publiées?)
+
+```{r art_popXsng_pop}
+x <- distinct(st, sng_id, .keep_all=TRUE)
+table(x$art_pop, x$sng_pop) %>% 
+  cprop() %>% 
+  kable(caption = "Popularité de la chanson (en colonne) par popularité de l'artiste (en ligne)")
+rm(x)
+gc()
+```
+
+Les seuils que l'on a choisit produisent une distribution apparemment paradoxal: les artistes higher-midtail sont plus écoutés en agrégé (mais représentent 10X plus d'artistes que les artistes star).
+
+```{r distribution_pop_artistes, fig.cap = "Distribution du nombre d'écoutes par popularité des artistes"}
 ggplot(st, aes(x = art_pop)) +
   geom_bar()
 
 ```
 
-
-```{r distribution_pop_songs}
+```{r distribution_pop_songs, fig.cap = "Distribution du nombre d'écoutes par popularité des pistes"}
 ggplot(st, aes(x = sng_pop)) +
   geom_bar()
 ```
+
+Auditeurs et écoutes sont très inégalement réparties entre les artistes, la plupart d'entre eux n'ayant quasiment 
 
 ```{r distribution_nb_auditeurs_par_art, fig.cap = "Distribution du nombre d'auditeurs par artiste"}
 df <- group_by(st, art_id) %>% 
@@ -382,7 +526,8 @@ df <- group_by(st, art_id) %>%
 
 ggplot(df, aes(aud)) + 
   geom_histogram() +
-  scale_x_log10()
+  scale_y_log10() +
+  labs(y = "Nombre d'artistes (logarithme)")
 ```
 
 
@@ -392,11 +537,14 @@ df <- group_by(st, art_id) %>%
 
 ggplot(df, aes(aud)) + 
   geom_histogram() +
-  scale_x_log10()
+  scale_x_log10() +
+  labs(y = "Nombre d'artistes (logarithme)")
 ```
 
 
 ## Dispositifs
+
+Les dispositifs constituent la façon dont l'auditeur est parvenu à la chanson. Une moitié environ ne peut être récupéré (ND et unknown). Le dispositif "stock", les chansons de la collection, qui inclut les favoris, est très fortement majoritaire (un tiers du total, incluant les unknown, dont près de deux tiers de l'ensemble pour lequel on dispose d'information)
 
 ```{r qualifie_nonqualifie}
 freq(st$context_cat, sort = "dec") %>% 
@@ -407,20 +555,26 @@ freq(st$context_cat, sort = "dec") %>%
 
 ```{r create_stnq}
 # réduire à écoutes qualifiées
-stnq <- filter(st, !(context_cat %in% c("stock", "ND", "unknown") | is.na(context_cat)))
+stnq <- filter(st, !(context_cat %in% c("ND", "unknown") | is.na(context_cat)))
 ```
 
+On se restreint ici aux dispositifs connus.
 
+Ces dispositifs varient à la fois par leur usage et par leur nombre d'usagers. Les écoutes issues du stock sont les plus nombreuses dans toutes les métriques. Elles concernent 92% des usagers et 64% des écoutes. Derrière, les dispositifs les plus utilisés en nombre d'écoutes sont les feed (radio et playlist), les pages d'artistes (top et discographie), et la recherche. De ceux-ci, les top artiste et la recherche sont les plus largement utilisés (3500 et 3000 usagers) alors que les autres le sont par 2/3 au maximum des usagers.
+
+On retrouve également des dispositfs moins utilisés, mais par beaucoup de monde : feed_track et feed_album.
 
 ```{r distribution_ecoutes_qualifies}
 group_by(stnq, context_cat) %>% 
   summarise(n = n(),
             f = round(n / nrow(stnq)*100, 1),
+            f_hors_stock = round(n / sum(stnq$context_cat != "stock")*100, 1),
             usagers_distincts = n_distinct(user_id),
             usage_moyen = round(n/usagers_distincts, 1)) %>% 
+  mutate(f_hors_stock = ifelse(context_cat == "stock", NA, f_hors_stock)) %>% 
+  arrange(n) %>% 
   kable(caption = "Distribution des dispositifs d'écoutes qualifiées")
 ```
-
 
 ```{r distribution_nb_dispositifs, fig.cap= "Distribution du nombre de dispositifs employés"}
 df <- group_by(st, user_id) %>% 
@@ -432,21 +586,25 @@ ggplot(df, aes(disp)) + geom_bar()
 
 ## Premiere écoute
 
+On s'intéresse désormais aux écoutes d'artistes qui n'ont pas été écoutés, ni favoris, auparavant (dans le dataset).
+
 ```{r data_premiere_fois}
 ## Créer un sous-ensemble de tracks écoutées pour la première fois (artiste écouté pour la première fois & non-favori)
 stpf <- group_by(st, user_id, art_id) %>% 
   mutate(n_reecoute = n()) %>% 
   arrange(timestamp) %>% 
   slice(1) %>% 
-  filter(context_cat != "stock")
+  filter(!(context_cat %in% c("stock", "unknown", "ND")))
 ```
 
+Ces premières écoutes se font environ deux fois plus souvent via les playlists
 
 ```{r distribution_dispositif_premiere_ecoute}
 freq(stpf$context_cat, sort = "dec") %>% 
   kable(caption = "Distribution des dispositifs pour les premières écoutes (première écoute d'un artiste non favori au moment de l'écoute)")
 ```
 
+Les premières écoutes qui se font par le top concernent beaucoup plus souvent des artistes stars, logiquement. Idem pour player-default, social, et surtout experts_editor. 
 
 ```{r association_dispositif_popularite_premiereecoute}
 table(stpf$context_cat, stpf$art_pop) %>% 
@@ -454,6 +612,7 @@ table(stpf$context_cat, stpf$art_pop) %>%
   kable(digits = 1, caption = "Association entre dispositif et popularité de l'artiste pour les premières écoutes")
 ```
 
+Mais si les playlists sont fortes pour la redécouverte, les artistes les plus réécoutés après la première écoutes sont ceux "découverts" (durant la période d'enquête) via leur page, puis les expert_editors.
 
 ```{r distribution_nombre_reecoute_par_dispositif_premiereecoute}
 group_by(stpf, context_cat) %>% 
