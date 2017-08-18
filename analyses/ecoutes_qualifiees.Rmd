@@ -1,6 +1,8 @@
 ---
 title: "Dispositifs d'écoute"
-output: html_document
+output:
+  tufte::tufte_html: default
+bibliography: /home/vvxf6766/PortKnox/bib/mainlibrary.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -325,6 +327,7 @@ Ce sont un peu plus souvent des femmes que dans l'ensemble de l'échantillon (44
 ## Analyse systématique des variables correlées avec passifs ; on ne conserve que celles qui le semblent
 lprop(table(us$passifs, us$gender)) %>% kable()
 ```
+
 Ils sont un peu plus âgés que la moyenne des utilisateurs.
 
 ```{r passifs_age_boxplot, fig.cap = "Âge des utilisateurs passifs"}
@@ -453,7 +456,7 @@ filter(us, !is.na(passifs)) %>%
   geom_boxplot(notch = TRUE)
 ```
 
-```{r passifs_div_artists_boxplot, eval=FALSE}
+```{r passifs_div_sng_boxplot, eval=FALSE}
 filter(us, !is.na(passifs)) %>% 
   ggplot(aes(passifs, div_sng)) + 
   geom_boxplot(notch = TRUE)
@@ -770,7 +773,7 @@ count(st, app_type, guid) %>%
 
 En ce qui concerne le type de guidage, desktop et mobile diffèrent peu ; par contre, on trouve plus de flux sur tablette et plus de recommandations sur web (même s'il faut se méfier, puisque ces deux supports sont très rarement employés).
 
-```{r typeguid_apptype_boxplot}
+```{r typeguid_apptype_boxplot, fig.cap = "Type de guidage par type de support"}
 count(st, app_type, type_guid) %>% 
   group_by(app_type) %>% 
   filter(type_guid != "Non guidée") %>% 

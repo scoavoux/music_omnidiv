@@ -420,6 +420,13 @@ us <- count(st, user_id, sng_id) %>%
   summarize(div_sng = prod(f^f)^-1) %>% 
   right_join(us)
 
+## Diversité des dispositifs employés
+us <- count(st, user_id, context_cat) %>% 
+  group_by(user_id) %>% 
+  mutate(f = n / sum(n)) %>% 
+  summarize(div_disp = prod(f^f)^-1) %>% 
+  right_join(us)
+
 
 ###### Fav albums ######
 
@@ -430,7 +437,6 @@ us <- count(st, user_id, sng_id) %>%
 
 ###### Clean-up  ######
 ## Remove some unused variable so that knitting becomes possible
-st <- select(st, -duration)
 gc()
 
 save(fs, fal, far, file = "data/favorites.RData")

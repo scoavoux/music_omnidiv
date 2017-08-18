@@ -1,6 +1,8 @@
 ---
 title: "Réplication thèse Maillard"
-output: html_document
+output:
+  tufte::tufte_html: default
+bibliography: /home/vvxf6766/PortKnox/bib/mainlibrary.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -168,7 +170,7 @@ ggplot(filter(us, !is.na(offer_id)), aes(offer_id, age)) +
 
 Les femmes sont légèrement plus représentées parmi la population des usagers de l'offre gratuite (46%, contre 37% de l'échantillon total).
 
-```{r offerid_age_boxplot}
+```{r offerid_genre_boxplot}
 ggplot(filter(us, !is.na(offer_id)), aes(offer_id, fill=gender)) + 
   geom_bar(position="fill")
 #tapply(us$gender, us$offer_id, freq)
@@ -209,16 +211,7 @@ lprop(table(st$offer_id, x)) %>% kable(caption = "Zapping par type d'application
 
 ## Distribution des écoutes
 
-On s'intéresse aux titres écoutés plus de 30 secondes. La distribution apparaît très fortement concentrée: peu de titres sont écoutés souvent, la grande majorité est écoutée peu de fois.
-
-```{r nb_titres_ecoute_longtemps}
-# Part des titres écoutés au moins une fois plus de trente secondes.
-group_by(st, sng_id) %>% 
-  summarize(e = sum(length > 30)) %>% 
-  filter(e > 0) %>% 
-  nrow() / length(unique(st$sng_id))
-```
-
+On s'intéresse aux titres écoutés plus de 30 secondes. La distribution apparaît très fortement concentrée: peu de titres sont écoutés souvent, la grande majorité est écoutée peu de fois. La part des titres écoutés au moins une fois plus de trente secondes est de `r group_by(st, sng_id) %>%  summarize(e = sum(length > 30)) %>% filter(e > 0) %>% nrow() / length(unique(st$sng_id)) * 100 %>% round(1)`%.
 
 ```{r distri_ecoute_plus_trente, fig.cap= "Distribution du nombre d'écoutes pour les écoutes de plus de trente secondes"}
 group_by(st, sng_id) %>% 
@@ -234,15 +227,14 @@ On constate que la distribution des écoutes suit approximativement une loi de p
 ```{r titre_plus_ecoute, fig.cap = "Distribution du nombre d'écoute (log x log)"}
 df <- count(st, sng_id) %>% 
   arrange(n)
-summary(df$n)
 ggplot(df, aes(x = n)) + 
   geom_point(stat = "bin") + 
   scale_x_log10() + 
   scale_y_log10()
 
-# Nombre d'écoutes minimales des cinq titres les plus écoutés
-slice(df, (n()-5))$n
 ```
+
+Le nombre d'écoutes minimales des cinq titres les plus écoutés est de `r slice(df, (n()-5))$n`
 
 
 
@@ -502,6 +494,9 @@ table(x$art_pop, x$sng_pop) %>%
   cprop() %>% 
   kable(caption = "Popularité de la chanson (en colonne) par popularité de l'artiste (en ligne)")
 rm(x)
+```
+
+```{r, results='hide'}
 gc()
 ```
 

@@ -1,0 +1,71 @@
+---
+title: "Eclectisme"
+author: "Samuel Coavoux"
+output:
+  tufte::tufte_html: default
+bibliography: /home/vvxf6766/PortKnox/bib/mainlibrary.bib
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE, 
+               error = FALSE, 
+               echo = FALSE, 
+               warning = FALSE, 
+               results = 'asis')
+```
+
+```{r packages}
+library(tidyverse)
+library(lubridate)
+library(here)
+library(questionr)
+library(GGally)
+
+```
+
+```{r data}
+load(here("data", "streams.RData"))
+load(here("data", "french_users.RData"))
+```
+
+```{r freq_genre}
+df <- group_by(st, genre) %>% 
+  summarize(n = n(),
+            nb_art = length(unique(art_id)),
+            nb_sng = length(unique(sng_id))) %>% 
+  filter(!is.na(genre)) %>% 
+  mutate(f_n = round(n / sum(n)*100, 2),
+         f_art = round(nb_art / sum(nb_art)*100, 2),
+         f_sng = round(nb_sng / sum(nb_sng)*100, 2),
+         ecoute_par_artiste = n/nb_art) %>% 
+  arrange(desc(n))
+
+kable(df, caption = "Distribution des genres dans les écoutes")
+  
+```
+
+## Diversité des genres
+
+### Indicateurs
+
+```{r diversity_summary}
+select(us, starts_with("div_")) %>% summary() %>% kable()
+
+```
+
+```{r diversity_barplot}
+select(us, starts_with("div_")) %>% 
+  gather(key, value) %>% 
+  ggplot(aes(value, fill = key)) +
+    geom_histogram() +
+    facet_wrap(~key, scales = "free")
+```
+
+### Lien avec usage des recommandations
+
+```{r diversity_correlation}
+select(us, starts_with("div_"), fq, fg, starts_with("freq")) %>% 
+  ggpairs()
+```
+
