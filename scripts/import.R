@@ -371,7 +371,8 @@ us <- group_by(st, user_id) %>%
             nb_guid = sum(guid == "Guidée", na.rm=TRUE),
             fq = nb_guid / sum(!is.na(guid)),
             fg = sum(type_guid == "Guidage", na.rm=TRUE) / sum(type_guid != "Non guidée" & !is.na(type_guid)),
-            passifs = factor(fq > 0.8 & nb_ecoutes > 100, levels = c(TRUE, FALSE), labels = c("Usagers principalement passifs", "Autres usagers")),
+            ## Passivité: ajouter une modalité quand aucune écoute passive
+            passifs = cut(fq, breaks = c(-.1, .00001, 0.8, 1.1), labels = c("Usagers exclusivement actifs", "Usagers mixtes", "Usagers principalement passifs")),
             nb_tracks = n_distinct(sng_id),
             nb_artists = n_distinct(art_id), 
             volume_ecoute = sum(length), 
@@ -384,7 +385,7 @@ us <- group_by(st, user_id) %>%
             freq_longtail_art = sum(art_pop == "Long tail", na.rm = TRUE) / n(),
             freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
   right_join(us, by = "user_id")
-
+us$passifs[us$nb_ecoutes < 100] <- NA
 ## Diversité des genres écoutés
 
 # On utilise les métriques de la présentation de Robin Lamarche-Perrin et al
