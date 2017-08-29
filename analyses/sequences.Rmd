@@ -1,0 +1,284 @@
+---
+title: "Séquences"
+author: "Samuel Coavoux"
+output:
+  tufte::tufte_html: default
+bibliography: /home/vvxf6766/PortKnox/bib/mainlibrary.bib
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE, 
+               error = FALSE, 
+               echo = FALSE, 
+               warning = FALSE, 
+               results = 'asis')
+opts_knit$set(self.contained = TRUE)
+```
+
+```{r packages}
+library(tidyverse)
+library(broom)
+library(stringr)
+library(lubridate)
+library(here)
+library(questionr)
+library(GGally)
+library(TraMineR)
+
+```
+
+```{r data}
+## donnes crées dans stream_sequence.R
+load(here("data", "streams_streak.RData"))
+st <- group_by(st, streak)
+## Supprimer 
+st <- filter(st, !is.na(guid))
+```
+
+On travaille désormais sur des séquences : des suites de morceaux écoutés dans un court laps de temps les uns à la suite des autres. On a dans notre échantillon `r length(unique(st$streak))` séquences. On commence par regarder leur taille, ce qui permet de constater qu'elles sont très inégales.
+
+```{r streak_length}
+count(st, streak)$n %>% summary() %>% tidy() %>% kable()
+```
+
+# Sélection des séquences
+
+Dans un premier temps, on se limite à des séquences de 5 à 14 pistes ; la taille limitée est due à la suppression des ND et unknown...
+
+Mais cela restreint peut-être trop le dataset, surtout que, visiblement, les séquences guidées sont plus courtes que les séquences stock.
+
+```{r filter_sequences}
+st <- filter(st, !is.na(genre)) %>% filter(n() >= 5, n() <= 14)
+```
+
+On ne travaille plus alors que sur `r length(unique(st$streak))` séquences représentant `r nrow(st)` écoutes
+
+# Qualification des séquences
+
+Comment qualifier des séquences du point de vue des dispositifs employés ? Commençons par étudier l'enchaînement de dispositifs d'écoute.
+
+## Enchaînement des dispositifs
+
+```{r disp_sequences_init}
+x <- summarize(st, seq = paste(as.character(context_cat), collapse = ";"))
+sq <- seqdef(x, var = 2, stsep = ";")
+tr <- seqtrate(sq)
+```
+
+```{r disp_transition_rate}
+## calcul des transition rates
+trm <- as_data_frame(tr) %>% mutate(fr = rownames(tr)) %>% 
+  gather(to, value, -fr)
+```
+
+On constate tout d'abord que les dispositifs sont plutôt stables dans l'ensemble. D'une écoute à l'autre, on tend à rester sur le même dispositif. C'est particulièrement vrai pour les écoutes de stock, qui sont les principales dans l'échantillon retenu, puis pour artist_disco. Au contraire, les quelques dispositifs pour lequel l'inertie est moindre sont faiblement représentés dans la base, esp. feed_track, social, feed_smartradio.
+
+Il convient cependant de mettre cela en relation avec la fréquence des transitions. On étudie en effet un événement toutes les trois minutes environ (en moyenne toutes les `r mean(st$duration, na.rm=TRUE)/60` minutes). Cela signifie que même si le taux d'inertie est de 90%, les chances de rester 5 pistes durant sur le même dispositif ne sont plus que de `r 0.9^5*100`%.
+
+Ainsi, le peloton entre stock/artist_disco (stables) et feed_track/social/feed_smartradio (instables)
+
+```{r disp_transition_rates_inertie}
+filter(trm, str_extract(to, "\\w+") == str_extract(fr, "\\w+")) %>% 
+  select(-to) %>% 
+  mutate(fr = str_extract(fr, "\\w+")) %>% 
+  arrange(value) %>% 
+  left_join(ungroup(st) %>% count(context_cat), by = c(fr = "context_cat")) %>% 
+  rename(dispositif = fr, 
+         freq_inertie = value,
+         occurences_totales = n) %>% 
+  mutate(`prob 5 écoutes successives (f^5)` = freq_inertie^5) %>% 
+  kable(caption = "Taux d'inertie des dispositifs dans les séquences")
+```
+
+Deuxième enseignement quand on regarde la matrice détaillée : pour la quasi-totalité des dispositifs, le dispositif le plus probable de l'écoute suivante, après lui-même, est le stock. C'est logique pour la majorité d'entre eux dans la mesure où le stock est le dispositif le plus utilisé. Cependant, il est remarquable qu'aucun ne s'en écarte: on voit là une tendance à revenir vers les pistes du catalogue personnel de l'usager.
+
+Ce phénomène n'a pas la même force pour tous les dispositifs. Il ne se vérifie pas pour experts_editor, dont la suite la plus probable après lui-même est explore_release, ainsi que pour feed_smartradio (-> feed_track). Les reports vers le stock sont plus faibles que la moyenne pour artist_disco, explore_release, feed_album/feed_playlist.
+
+Au contraire, l'attrait du stock est important après les écoutes social, search, radio_flow, feed_track, feed_radio.
+
+```{r disp_transition_rates_heatmap, fig.cap = "Transition rate des dispositifs"}
+ggplot(trm, aes(to, fr)) + 
+    geom_tile(aes(fill=value)) +
+    geom_text(aes(label = round(value, 2)), label.size = "0.15") +
+    scale_x_discrete(position = "top") +
+    scale_fill_gradient(low = "#FFFFFF", high = "#FF0000") +
+    labs(y = "From", x = "To") +
+    theme(axis.text = element_text(size="110%"), axis.text.x = element_text(angle = 45, hjust= 0)) +
+    coord_fixed()
+```
+
+## Séquences guidées et séquences stock
+
+On peut essayer de délimiter des "séquences guidées" et des "séquences stock". Seules 19.1% des séquences ont au moins une écoute qui a été guidée ; considérons que s'il y en a une seule, on peut parler de séquence guidée.
+
+
+```{r}
+st <- mutate(st, seq_guid = ifelse(any(guid == "Guidée"), "Guidée", "Non guidée"))
+```
+
+# Séquences de genre
+
+Définissons désormais les séquences par le genre des pistes
+
+```{r genre_sequences_init}
+x <- summarize(st, seq = paste(as.character(genre), collapse = ";"))
+sq <- seqdef(x, var = 2, stsep = ";")
+tr <- seqtrate(sq)
+```
+
+```{r genre_transition_rate}
+## calcul des transition rates
+trm <- as_data_frame(tr) %>% mutate(fr = rownames(tr)) %>% 
+  gather(to, value, -fr)
+```
+
+```{r genre_transition_rates_inertie}
+filter(trm, str_extract(to, "[\\w&\\s\\/]+") %>% str_trim() == str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>% 
+  select(-to) %>% 
+  mutate(fr = str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>% 
+  arrange(value) %>% 
+  left_join(ungroup(st) %>% count(genre), by = c(fr = "genre")) %>% 
+  rename(dispositif = fr, 
+         freq_inertie = value,
+         occurences_totales = n) %>% 
+  mutate(`prob 5 écoutes successives (f^5)` = freq_inertie^5) %>% 
+  kable(caption = "Taux d'inertie des dispositifs dans les séquences")
+```
+
+^[En partant d'une chanson dont le genre est indiqué en ligne, le graphique indique la probabilité que la chanson suivante soit du genre indiqué en colonne. Par exemple, 2% des chansons World Music seront suivies d'écoutes de chansons alternative]
+
+```{r genre_transition_rates_heatmap, fig.cap = "Transition rate des genres", fig.fullwidth = TRUE, fig.width = 10, fig.height = 10}
+ggplot(trm, aes(to, fr)) + 
+    geom_tile(aes(fill=value)) +
+    geom_text(aes(label = round(value, 2)), label.size = "0.15") +
+    scale_x_discrete(position = "top") +
+    scale_fill_gradient(low = "#FFFFFF", high = "#FF0000") +
+    labs(y = "From", x = "To") +
+    theme(axis.text = element_text(size="110%"), axis.text.x = element_text(angle = 45, hjust= 0)) +
+    coord_fixed()
+```
+
+Le graphique permet de repérer les genres les plus exclusifs. Ce sont le classique et le hip-hop d'abord, suivi du metal, du reggae, du jazz, de la jeunesse. pour les deux premiers, on est seulement à 25% de chances de changer de style d'une chanson à l'autre. À l'inverse, le style le moins exclusif est la soul, suivi de la comédie musicale, et du R&B, les trois seuls pour lesquels on a moins d'une chance sur deux de rester dans le même style d'une chanson à l'autre.
+
+## Restriction aux séquences guidées
+
+Si l'on prend seulement ceux pour lesquels l'écoute est guidée durant la séquence, on obtient des inerties plus faibles/plus de passages d'un genre à l'autre.
+
+```{r genre_sequences_init_guides}
+x <- filter(st, guid == "Guidée") %>% 
+  summarize(seq = paste(as.character(genre), collapse = ";"))
+sq <- seqdef(x, var = 2, stsep = ";")
+tr <- seqtrate(sq)
+```
+
+```{r genre_transition_rate_guides}
+## calcul des transition rates
+trm <- as_data_frame(tr) %>% mutate(fr = rownames(tr)) %>% 
+  gather(to, value, -fr)
+```
+
+```{r genre_transition_rates_inertie_guides}
+filter(trm, str_extract(to, "[\\w&\\s\\/]+") %>% str_trim() == str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>% 
+  select(-to) %>% 
+  mutate(fr = str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>% 
+  arrange(value) %>% 
+  left_join(ungroup(st) %>% count(genre), by = c(fr = "genre")) %>% 
+  rename(dispositif = fr, 
+         freq_inertie = value,
+         occurences_totales = n) %>% 
+  mutate(`prob 5 écoutes successives (f^5)` = freq_inertie^5) %>% 
+  kable(caption = "Taux d'inertie des dispositifs dans les séquences")
+```
+
+
+```{r genre_transition_rates_heatmap_guides, fig.cap = "Transition rate des genres", fig.fullwidth = TRUE, fig.width = 10, fig.height = 10}
+ggplot(trm, aes(to, fr)) + 
+    geom_tile(aes(fill=value)) +
+    geom_text(aes(label = round(value, 2)), label.size = "0.15") +
+    scale_x_discrete(position = "top") +
+    scale_fill_gradient(low = "#FFFFFF", high = "#FF0000") +
+    labs(y = "From", x = "To") +
+    theme(axis.text = element_text(size="110%"), axis.text.x = element_text(angle = 45, hjust= 0)) +
+    coord_fixed()
+```
+
+
+# Séquences de popularité
+
+Définissons désormais les séquences par la popularité des artistes
+
+```{r art_pop_sequences_init}
+x <- summarize(st, seq = paste(as.character(art_pop), collapse = ";"))
+sq <- seqdef(x, var = 2, stsep = ";")
+tr <- seqtrate(sq)
+```
+
+```{r art_pop_transition_rate}
+## calcul des transition rates
+trm <- as_data_frame(tr) %>% mutate(fr = rownames(tr)) %>% 
+  gather(to, value, -fr) %>% 
+  mutate(fr =factor(fr, levels = c(
+    "[Long tail ->]", 
+    "[Lower mid-tail ->]", 
+    "[Higher mid-tail ->]", 
+    "[Star ->]"
+  )
+  ),
+  to = factor(to, levels = c(
+    "[-> Long tail]", 
+    "[-> Lower mid-tail]", 
+    "[-> Higher mid-tail]", 
+    "[-> Star]")))
+```
+
+```{r art_pop_transition_rates_heatmap, fig.cap = "Transition rate des art_pops"}
+ggplot(trm, aes(to, fr)) + 
+    geom_tile(aes(fill=value)) +
+    geom_text(aes(label = round(value, 2)), label.size = "0.15") +
+    scale_x_discrete(position = "top") +
+    scale_fill_gradient(low = "#FFFFFF", high = "#FF0000") +
+    labs(y = "From", x = "To") +
+    theme(axis.text = element_text(size="110%"), axis.text.x = element_text(angle = 45, hjust= 0)) +
+    coord_fixed()
+```
+
+## Restriction aux séquences guidées
+
+
+```{r art_pop_sequences_init_guides}
+x <- filter(st, guid == "Guidée") %>% 
+  summarize(seq = paste(as.character(art_pop), collapse = ";"))
+sq <- seqdef(x, var = 2, stsep = ";")
+tr <- seqtrate(sq)
+```
+
+```{r art_pop_transition_rate_guides}
+## calcul des transition rates
+trm <- as_data_frame(tr) %>% mutate(fr = rownames(tr)) %>% 
+  gather(to, value, -fr) %>% 
+  mutate(fr =factor(fr, levels = c(
+    "[Long tail ->]", 
+    "[Lower mid-tail ->]", 
+    "[Higher mid-tail ->]", 
+    "[Star ->]"
+  )
+  ),
+  to = factor(to, levels = c(
+    "[-> Long tail]", 
+    "[-> Lower mid-tail]", 
+    "[-> Higher mid-tail]", 
+    "[-> Star]")))
+```
+
+```{r art_pop_transition_rates_heatmap_guides, fig.cap = "Transition rate des art_pops"}
+ggplot(trm, aes(to, fr)) + 
+    geom_tile(aes(fill=value)) +
+    geom_text(aes(label = round(value, 2)), label.size = "0.15") +
+    scale_x_discrete(position = "top") +
+    scale_fill_gradient(low = "#FFFFFF", high = "#FF0000") +
+    labs(y = "From", x = "To") +
+    theme(axis.text = element_text(size="110%"), axis.text.x = element_text(angle = 45, hjust= 0)) +
+    coord_fixed()
+```
+
