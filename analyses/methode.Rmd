@@ -1,7 +1,10 @@
 ---
 title: "Diversité algorithmique et éclectisme. Description de la méthode d'enquête"
 author: "Samuel Coavoux"
-output: html_document
+output:
+  tufte::tufte_html: default
+bibliography: /home/vvxf6766/PortKnox/bib/mainlibrary.bib
+
 ---
 
 ```{r setup, include=FALSE}

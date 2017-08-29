@@ -541,6 +541,40 @@ ggplot(df, aes(aud)) +
 
 Les dispositifs constituent la façon dont l'auditeur est parvenu à la chanson. Une moitié environ ne peut être récupéré (ND et unknown). Le dispositif "stock", les chansons de la collection, qui inclut les favoris, est très fortement majoritaire (un tiers du total, incluant les unknown, dont près de deux tiers de l'ensemble pour lequel on dispose d'information)
 
+code | nom
+-----|-----
+**Recommandations personnalisées**| 
+feed_album | albums
+feed_track | titre
+feed_playlist | playlists
+feed_radio | radio éditoriale
+feed_smartradio | radio algorithmique
+**Recommandations sociales**| 
+social | Recommandations sociales
+**Recommendations éditoriales**| 
+experts_editor | Recommendations éditoriales
+**Classements**| 
+top | Classements
+**Nouvelles sorties**| 
+explore_release | Nouvelles sorties
+**Radios**| 
+radio_editoriale | radios éditoriales
+radio_flow | radios "flow"
+smartradio | radios algorithmique
+**Outils contextuels**| 
+artist_disco | discographie de l'artiste
+artist_top | top de l'artiste
+**Moteur de recherche**| 
+search | Moteur de recherche
+**Player (par défaut)**| 
+player_defaut | Player (par défaut)
+**Stock**|
+stock | Catalogue personnel (principalement favoris)
+**Inconnu**|
+ND | non déclaré
+unknown | inconnu
+
+
 ```{r qualifie_nonqualifie}
 freq(st$context_cat, sort = "dec") %>% 
   kable(caption = "Distribution des dispositifs employés")

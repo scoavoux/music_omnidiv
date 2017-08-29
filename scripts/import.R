@@ -349,6 +349,7 @@ st <- mutate(st,
 
 ## Genres
 st <- left_join(st, select(genres, genre = name, alb_id), by = "alb_id")
+so <- left_join(so, select(genres, genre = name, alb_id), by = "alb_id")
 
 ###### Appareiller streams et users######
 st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),

@@ -391,7 +391,7 @@ filter(us, !is.na(passifs)) %>%
 
 ## Diversité 
 
-Ils écoutent un nombre significativement plus importannt d'artistes différents.
+Ils écoutent un nombre significativement plus important d'artistes différents.
 
 ```{r passifs_nbart_boxplot, fig.cap = "Nombre d'artistes différents écoutés par les utilisateurs passifs"}
 ## Différences dans le nombre d'artistes différents écoutés
@@ -444,19 +444,19 @@ filter(us, !is.na(passifs)) %>%
 
 Surtout, les utilisateurs "passifs" ont une plus grande diversité d'écoute, définie en termes de genres, d'artistes, ou de chansons. (à chaque fois, diversité = inverse de entropie de Shannon)
 
-```{r passifs_div_genres_boxplot, eval=FALSE}
+```{r passifs_div_genres_boxplot}
 filter(us, !is.na(passifs)) %>% 
   ggplot(aes(passifs, div_genre)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r passifs_div_artists_boxplot, eval=FALSE}
+```{r passifs_div_artists_boxplot}
 filter(us, !is.na(passifs)) %>% 
   ggplot(aes(passifs, div_artists)) + 
   geom_boxplot(notch = TRUE)
 ```
 
-```{r passifs_div_sng_boxplot, eval=FALSE}
+```{r passifs_div_sng_boxplot}
 filter(us, !is.na(passifs)) %>% 
   ggplot(aes(passifs, div_sng)) + 
   geom_boxplot(notch = TRUE)
