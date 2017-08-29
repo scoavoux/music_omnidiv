@@ -12,22 +12,58 @@ opts_chunk$set(message = FALSE,
                error = FALSE, 
                echo = FALSE, 
                warning = FALSE, 
-               results = 'asis')
+               results = 'asis',
+               fig.width = 10,
+               fig.height = 10)
+if(isTRUE(getOption('knitr.in.progress'))){
+  stargazer_type <- "html"
+} else {
+  stargazer_type <- "text"
+}
+  
 ```
 
 ```{r packages}
 library(tidyverse)
+library(cowplot)
+library(broom)
 library(lubridate)
 library(here)
 library(questionr)
 library(GGally)
+library(FactoMineR)
+library(factoextra)
+library(nnet)
+library(stargazer)
+
+theme_set(theme_bw())
 
 ```
 
 ```{r data}
 load(here("data", "streams.RData"))
 load(here("data", "french_users.RData"))
+load(here("data", "songs_artists.RData"))
 ```
+
+On s'intéresse dans ce document aux genres musicaux.
+
+Rappel: on a attribué un seul genre par piste à partir d'un algorithme maison. En réalité, il y avait des pistes avec deux ou trois genres différents. Le genre est directement celui de l'album.
+
+Le tableau suivant présente effectifs et fréquence des pistes écoutées, des artistes et des chansons unique (moindre que le nombre de piste puisqu'une piste peut être écoutée plusieurs fois).
+
+les genres sont très inégalement répartis. Si l'on regarde le catalogue de chanson (f_sng), on a un genre très dominant avec une chanson sur 5, la pop, puis quelques genres autour de 1/10 : rock, alternative, rap, dance, et enfin une traîne que l'on peut diviser en deux: les genres autour de 5%, electro, jazz et classique, et les genres plus marginaux, de 3% pour les BO de films à 0.22% pour les comédies musicales. Ce dernier genre, le plus marginal, rassemble tout de même 1567 chansons et 27000 écoutes sur la période considérée.
+
+La distribution des pistes effectivement écoutées est encore plus skewed. Pop et rap sont en tête tous deux avec 1/5 à 1/4 des écoutes chacun. On retrouve ensuite alternative et dance autour de 1/10 et on tombe vite à 7% des écoutes pour le rock, puis moins de 5% pour les autres.
+
+Le décalage le plus fort entre les deux métriques est pour le rap et le rock. Dans le cas du rap, la place dans le catalogue est deux fois moindre que la place dans les écoutes ; pour le rock, c'est l'inverse. Il y a deux hypothèses possibles : 
+
++ les auditeurs de rap sont plus exclusifs que les auditeurs de rock: ils écoutent souvent les mêmes artistes/chansons
++ le catalogue de rap est plus restreint que le catalogue de rock ; les auditeurs de rap n'ont pas la même offre:
+  - soit parce que le catalogue de Deezer est limité/biaisé
+  - soit parce que la production est limitée/biaisée
+  
+On pourrait vérifier cela en étudiant le catalogue Deezer complet et/ou en trouvant des chiffres sur la production. Je penche tout de même pour la deuxième solution
 
 ```{r freq_genre}
 df <- group_by(st, genre) %>% 
@@ -45,27 +81,402 @@ kable(df, caption = "Distribution des genres dans les écoutes")
   
 ```
 
-## Diversité des genres
+# Diversité
 
-### Indicateurs
+Pour mesurer la diversité, on emploie l'inverse de l'entropie de Shannon, as usual. Le maximum théorique est à 19 (nombre total de genre) pour les personnes qui écoutent de tous les genres de manière égale.
 
 ```{r diversity_summary}
-select(us, starts_with("div_")) %>% summary() %>% kable()
+summary(us$div_genre) %>% tidy() %>%  kable(caption = "Distribution de la diversité de genre")
+```
+
+La variable n'est pas normalement distribuée du fait de la queue à gauche, mais le reste de la distribution ressemble à une loi normale, avec un pic autour de la moyenne.
+
+```{r diversity_histogramme, fig.cap  = "Histogramme et graph qq de la diversité de genre"}
+plot_grid(ggplot(us, aes(div_genre)) +
+                geom_histogram(),
+          ggplot(us, aes(sample = div_genre)) +
+            geom_qq(),
+          nrow = 2)
+```
+
+# Extrêmes 
+
+Comme pour les recommandations, on peut chercher à qualifier des catégories d'usagers, des plus divers au moins divers.
+
+```{r initi_divgenre_categoriel}
+dm <- mean(us$div_genre, na.rm = TRUE)
+ds <- sd(us$div_genre, na.rm = TRUE)
+
+coeff <- 1.8
+
+## changer les limites pour essayer d'autres catégorisations
+lims <- c(0, dm-coeff*ds, dm-coeff*ds/2, dm+coeff*ds/2, dm + coeff*ds,  19)
+
+us <- mutate(us, dgc = cut(div_genre, 
+                           breaks = lims, 
+                           include.lowest = TRUE,
+                           labels = c("Très faible diversité",
+                                      "Diversité faible",
+                                      "Diversité moyenne",
+                                      "Diversité forte",
+                                      "Très forte diversité")))
+```
+
+Pour le moment, on met dans les extrêmes les usagers qui sont à plus de `r coeff` écarts-type de la moyenne (+ on fait trois catégories centrales limitées par `r coeff/2` écarts types de la moyenne).
+
+```{r freq_dgc}
+freq(us$dgc) %>% kable(caption = "Distribution de diversité (variable catégorielle)")
+```
+
+## Liens avec variables socio-démographiques
+
+Les hommes sont significativement plus présents chez les usagers à faible diversité ; les autres catégories ne semble pas très affectés par le genre, même si les hommes sont légèrement plus présents dans les fortes diversités (les femmes sont un peu plus souvent au milieu de la distribution).
+
+```{r dgc_sexe}
+lprop(table(us$dgc, us$gender)) %>% 
+  kable(caption = "Diversité par sexe")
+```
+
+Les personnes à forte diversité sont significativement plus âgées que les autres, avec une médiane à 35 ans (âge médian de l'échantillon : `r median(us$age, na.rm=TRUE)` ans).
+
+```{r dgc_age_boxp, fig.cap = "Âge par catégorie de diversité de genre"}
+ggplot(us, aes(dgc, age)) +
+  geom_boxplot(notch = TRUE) +
+  labs(x = "Catégorie de diversité", y ="Âge") +
+  expand_limits(y = 0)
+```
+
+```{r}
+tapply(us$age, us$dgc, median, na.rm=TRUE) %>% 
+  tidy() %>% 
+  kable(caption = "Âge médian par catégorie de diversité")
+```
+
+Les usagers à forte diversité ont également significativement plus d'ancienneté sur Deezer.
+
+```{r dgc_anciennete_boxp, fig.cap = "Ancienneté sur Deezer (en jours) par catégorie de diversité de genre"}
+ggplot(us, aes(dgc, anciennete_days)) +
+  geom_boxplot(notch = TRUE) +
+  labs(x = "Catégorie de diversité", y ="Ancienneté sur le service") +
+  expand_limits(y = 0)
+```
+
+## Lien avec les autres mesures de diversité
+
+La diversité mesurée par les genres est corrélée avec toutes les autres mesures de diversité. Le graph en bas à gauche est tautologique: la variable catégorie de diversité de genre est construite à partir de div_genre. Mais l'on constate également un lien avec la diversité en termes d'artistes et de chansons, ainsi, surtout, qu'en tant que dispositifs. Les personnes qui ont une usage plus divers de ces dispositifs (plus de dispositifs différents écoutés de façon plus égalitaire que les autres) sont aussi susceptibles d'avoir une plus grande diversité de genre.
+
+```{r dgc_div_boxp, fig.cap = "Mesures de diversité par catégorie de diversité de genre", fig.fullwidth = TRUE}
+select(us, dgc, starts_with("div")) %>% 
+  gather(key, value, -dgc) %>% 
+  ggplot(aes(dgc, value)) + 
+    geom_boxplot(notch = TRUE) +
+    expand_limits(y = 0) +
+    theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
+    facet_wrap(~key, scales = "free")
 
 ```
 
-```{r diversity_barplot}
-select(us, starts_with("div_")) %>% 
-  gather(key, value) %>% 
-  ggplot(aes(value, fill = key)) +
-    geom_histogram() +
+Le lien avec la diversité des dispositifs se retrouve sur le nombre de dispositifs différents employés (= la diversité définie comme richness).
+
+```{r dgc_nbdisp_boxp, fig.cap = "Nombre de dispositifs différents employés par diversité de genres"}
+ggplot(us, aes(dgc, nb_dispositifs)) +
+  geom_boxplot(notch = TRUE) +
+    expand_limits(y = 0) +
+    theme(axis.text.x = element_text(angle = 45, hjust= 1))
+
+```
+
+Pour les autres variables de richness, on emploie une échelle logarithmique, du fait de l'importance des outliers qui écrasent le graphique. On constate encore que toutes sont corrélées avec la diversité de l'écoute: le nombre d'écoutes guidées, le nombre d'écoutes, le nombre d'artistes différents, et même le nombre de favoris: il y a donc tout de même un effet de l'intensité de la pratique.
+
+```{r dgc_comportement_boxp, fig.cap = "Mesures de l'écoute par catégorie de diversité de genre (échelle logarithmique)", fig.fullwidth = TRUE}
+select(us, dgc, starts_with("nb"), -nb_dispositifs) %>% 
+  gather(key, value, -dgc) %>% 
+  ggplot(aes(dgc, value)) + 
+    geom_boxplot(notch = TRUE) +
+    expand_limits(y = 0) +
+    scale_y_log10() +
+    theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
+    facet_wrap(~key, scales = "free", ncol = 2)
+```
+
+## Liens avec les usages de dispositifs
+
+La diversité augmente avec la fréquence d'usage des dispositifs de guidage ; cependant, cet usage diminue légèrement, mais pas significativement, entre les deux dernières catégories.
+
+```{r dgc_fq_boxp, fig.cap = "Fréquence d'usage des dispositifs de guidage par diversité de genre"}
+ggplot(us, aes(dgc, fq)) + 
+  geom_boxplot(notch = TRUE) +
+  theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
+  labs(x = "Catégorie de diversité", y ="Fréquence d'écoutes guidées")
+```
+
+## Lien avec les écoutes
+
+La diversité est corrélée positivement avec la fréquence d'écoute d'artistes de la long traîne ; et négativement avec l'écoute de nouveautés. On ne voit pas de lien significatif avec l'écoute des stars, même si la dispersion semble plus limitée pour ceux qui ont une forte diversité que pour ceux qui en ont une faible.
+
+```{r dgc_pop_boxp, fig.cap = "Popularité des pistes écoutées par diversité de genre", fig.fullwidth = TRUE}
+select(us, dgc, freq_star_sng, freq_star_art, freq_longtail_art, freq_nouveaute) %>% 
+  gather(key, value, -dgc) %>% 
+  ggplot(aes(dgc, value)) + 
+    geom_boxplot(notch = TRUE) +
+    expand_limits(y = 0) +
+    theme(axis.text.x = element_text(angle = 45, hjust= 1)) +
     facet_wrap(~key, scales = "free")
 ```
 
-### Lien avec usage des recommandations
+## Analyse multivariée
 
-```{r diversity_correlation}
-select(us, starts_with("div_"), fq, fg, starts_with("freq")) %>% 
-  ggpairs()
+Les analyses précédentes montrent un lien à la fois avec les usages de dispositifs et avec l'intensité de la pratique. Le risque, alors, est que la diversité des dispositifs soit simplement un proxy de l'intensité.
+
+On cherche à vérifier l'interaction entre ces variables, d'abord à partir de régression linéaire (TODO: sans doute pas le bon modèle, à ajuster). On constate que la diversité des dispositifs employés est le meilleur prédicteur de la diversité des genres, et conserve un effet significatif lorsque l'on introduit l'intensité (nombre d'écoutes), ainsi que lorsque l'on introduit le type d'abonnement dans la régression.
+
+```{r lm_div_genre}
+stargazer(lm(div_genre ~ div_disp, data = us),
+          lm(div_genre ~ nb_ecoutes, data = us),
+          lm(div_genre ~ div_disp + nb_ecoutes, data = us),
+          lm(div_genre ~ div_disp + nb_ecoutes + offer_id + age + fq, data = us),
+          type = stargazer_type)
+```
+
+Pour être propre, en continuité avec ce que l'on a fait dans cette section, il faudrait plutôt modéliser la variable qualitative catégorie de diversité. Le modèle suivant, exploratoire, semble confirmer la régression précédente, mais apporte une nuance: pour la catégorie très forte diversité, la fréquence d'usage des dispositifs de guidage (fq) a une influence négative (décroît les chances d'appartenir à cette catégorie). Cela rejoint un point étonnant que l'on avait perçu sur les graphs bivariés (cf. supra).
+
+```{r multinom_div_genre}
+stargazer(multinom(dgc ~div_disp + nb_ecoutes + offer_id + age + fq, data = mutate(us, dgc = relevel(dgc, ref = "Diversité moyenne"))),
+          type = stargazer_type)
+```
+
+
+# Association entre genres
+
+Dans cette section, on étudie les liens entre les différents genres, d'abord à partir des co-écoutes. Il s'agit ici de reproduire les analyses que l'on peut faire à partir de l'enquête PCF.
+
+## Analyse des correspondances
+
+Dans un premier temps, on calcule la fréquence d'écoute de chacun des 19 genres pour chaque individu. On obtient donc une matrice de 19 variables, sur laquelle on réalise une analyse des correspondances multiples.
+
+```{r pca_genres}
+df <- count(st, user_id, genre) %>% 
+  filter(!is.na(genre)) %>% 
+  group_by(user_id) %>% 
+  mutate(n = n/sum(n)) %>% 
+  spread(genre, n, fill = 0) %>% 
+  ## ajouter les variables supplémentaires
+  right_join(select(us, user_id, div_genre, age)) %>% 
+  ungroup()
+
+
+```
+
+L'analayse des eigenvalue montre un fort déclin entre le premier et le deuxième axe, et des coudes à 2, 4, et 5 axes. On commente pour le moment les 4 premiers axes.
+
+```{r genres_pca_eig, fig.cap = "Inertie de l'ACP"}
+gpca <- PCA(select(df, -user_id), quanti.sup = 20:21, graph = FALSE)  
+fviz_eig(gpca)
+```
+
+L'axe 1 est caractérisé principalement par l'opposition entre rock et alternatif d'un côté, hip-hop de l'autre. Pop et alternatif sont associé au blues, metal, pop, country ; rap à R&B, dance, reggae, world. la diversité et l'âge (en illustratif) sont tous deux côté rock.
+
+```{r genres_pca_axe1}
+dimdesc(gpca, 1)[[1]][[1]] %>% 
+  tidy() %>% 
+  mutate(p.value = ifelse(p.value < 0.0001, "< .0001", p.value)) %>% 
+  kable(caption = "Description de l'axe 1")
+```
+
+L'axe 2 est caractérisé principalement par l'opposition entre pop d'un côté, electro de l'autre. Pop est associé à chanson, R&B, jeunesse, comédie musicale ; electro à alternative, metal, dance.
+
+```{r genres_pca_axe2}
+dimdesc(gpca, 2)[[1]][[1]] %>%
+  tidy() %>% 
+  mutate(p.value = ifelse(p.value < 0.0001, "< .0001", p.value)) %>% 
+  kable(caption = "Description de l'axe 2")
+```
+
+```{r genres_pca_var12, fig.cap = "Diagramme des variables issue de l'ACP sur les genres, axes 1 et 2", fig.fullwidth = TRUE}
+fviz_pca_var(gpca) + coord_fixed()
+```
+
+L'axe 3 oppose le blues à la dance ; blues associé à soul, jazz, rap, reggae, r&b ; dance à pop, electro, jeux vidéo.
+
+```{r genres_pca_axe3}
+dimdesc(gpca, 3)[[1]][[1]] %>% tidy() %>% 
+  mutate(p.value = ifelse(p.value < 0.0001, "< .0001", p.value)) %>% 
+  kable(caption = "Description de l'axe 3")
+```
+
+L'axe 4 oppose la soul au rap ; soul associé à electro, jazz, r&b, dance ; lié à diversité ; rap associé à metal.
+
+```{r genres_pca_axe4}
+dimdesc(gpca, 4)[[1]][[1]] %>% tidy() %>% 
+  mutate(p.value = ifelse(p.value < 0.0001, "< .0001", p.value)) %>% 
+  kable(caption = "Description de l'axe 4")
+```
+
+```{r genres_pca_var34, fig.cap = "Diagramme des variables issue de l'ACP sur les genres, axes 3 et 4", fig.fullwidth = TRUE}
+fviz_pca_var(gpca, axes = c(3, 4)) + coord_fixed()
+```
+
+## Catégorisation à partir des axes de l'ACP
+
+On réalise une classification ascendante hiérarchique sur les résultats de l'ACP, afin de catégoriser 
+
+```{r genres_hcpc}
+ghc <- HCPC(gpca, graph = FALSE)
+us$clust <- paste("Clust.", ghc$data.clust$clust)
+```
+
+
+L'algorithme choisit de couper en 6 classes (pour maximiser variance inter-groupe et minimiser variance intra-groupe).
+
+```{r hcpc_tree}
+plot(ghc, choice = "tree")
+```
+
+Ils ont des effectifs variant de 185 à 1270, soit de 4.7% à 32.1% de l'échantillon.
+
+```{r clust_freq}
+freq(us$clust) %>% 
+  kable(caption = "Distribution des clusters")
+```
+
+On peut caractériser ces clusters à partir des genres écoutés. Le tableau suivant donne la part moyenne de chaque genre dans l'écoute de chaque cluster. Par exemple, 2.1% des écoutes des gens du cluster 1, en moyenne, sont des écoutes de musique du genre alternatif.
+
+Le Cluster 1 (22% de l'échantillon) est caractérisé avant tout par une très forte écoute de rap (55% des écoutes) et une légère sur-représentation du R&B et du reggae ; tous les autres genres sont sous-représentés.
+
+Le Cluster 2 (20.9%) est caractérisé par une sur-représentation de Dance et Electro.
+
+Le cluster 3 (32.1%) est caractérisé par une forte sur-représentation de la pop et une sous-représentation du rap.
+
+Le cluster 4 (6.1%) est caractérisé par une forte sous-représentation du rap, une forte surreprésentation du jazz, de la soul, 
+
+Le cluster 5 (4.7%) est caractérisé par une très forte sous-représentation du rap, et une forte sur-représentation de la musique de film, du classique, et de la musique jeunesse.
+
+Le cluster 6 (14.1%) est caractérisé par une forte sur-représentation du rock et de l'alternatif, et une sous-représentation du rap.
+
+```{r clust_desc}
+select(ghc$data.clust, -age, -div_genre) %>% 
+  mutate(clust = paste("Clust.", clust)) %>% 
+  gather(genre, value, -clust) %>% 
+  group_by(clust, genre) %>% 
+  summarize(m = round(mean(value) * 100, 1)) %>% 
+  ungroup() %>% 
+  spread(clust, m) %>% 
+  left_join(select(ghc$data.clust, -age, -div_genre, -clust) %>% 
+              gather(genre, value) %>% 
+              group_by(genre) %>% 
+              summarize(`**Ensemble**` = round(mean(value) * 100, 1))
+  ) %>% 
+  arrange(desc(`**Ensemble**`)) %>% 
+  kable(caption = "Fréquence d'écoute moyenne de chaque genre dans chaque cluster")
+```
+
+Rap très clivant (beaucoup vs. peu écouté) ; ensuite, chaque cluster construit autour d'un ou deux genres favoris.
+
+### Liens avec variables socio-démographiques
+
+Qu'est ce qui caractérise les usagers appartenant à ces différents clusters?
+
+On trouve peu d'écart de sexe, sauf dans le cluster 1 (plus masculin) et dans le 3 (plus féminin).
+
+```{r clust_sexe}
+lprop(table(us$clust, us$gender)) %>% 
+  kable(caption = "Diversité par sexe")
+```
+
+Le cluster 4 (jazz, soul) est le plus âgé en moyenne ; le cluster 1 (rap) le plus jeune et le moins dispersé.
+
+```{r clust_age_boxp, fig.cap = "Âge par appartenance à un cluster"}
+ggplot(us, aes(clust, age)) +
+  geom_boxplot(notch = TRUE) +
+  expand_limits(y = 0)
+```
+
+Il y a peu d'écart d'ancienneté, sinon que les usagers du premier cluster utilisent le site depuis moins longtemps que les autres.
+
+```{r clust_anciennente_boxp, fig.cap = "Ancienneté Deezer (en jours) par appartenance à un cluster"}
+ggplot(us, aes(clust, anciennete_days)) +
+  geom_boxplot(notch = TRUE) +
+  expand_limits(y = 0)
+```
+
+### Lien avec les autres mesures de diversité
+
+La diversité en termes de genre est la plus faible pour les usagers du cluster 1, et la plus forte pour ceux du cluster 4. on trouve au milieu les clusters 3, 5 et 6 ; le 2 est légérement plus divers que les autres. Le 5 est plus dispersé.
+
+En matière d'artistes, le 2 et le 4 sont légèrement au dessus des autres ;
+en matière de dispositifs, seuls le cluster 1 est un peu derrière les autres.
+
+En matières de chanson, le 4 est légèrement au dessus.
+
+```{r clust_div_boxp, fig.cap = "Diversité par appartenance à un cluster", fig.fullwidth = TRUE}
+select(us, clust, starts_with("div")) %>% 
+  gather(key, value, -clust) %>% 
+  ggplot(aes(clust, value)) + 
+    geom_boxplot(notch = TRUE) +
+    expand_limits(y = 0) +
+    facet_wrap(~key, scales = "free")
+
+```
+
+```{r clust_nb_boxp, fig.cap = "Mesures de l'écoute par appartenance à un cluster (échelle logarithmique)", fig.fullwidth = TRUE}
+select(us, clust, starts_with("nb")) %>% 
+  gather(key, value, -clust) %>% 
+  ggplot(aes(clust, value)) + 
+    geom_boxplot(notch = TRUE) +
+    scale_y_log10() +
+    expand_limits(y = 0) +
+    facet_wrap(~key, scales = "free")
+```
+
+C'est confirmé par le croisement avec les catégories de diversité. Le cluster 1 est très sureprésenté dans les catégories de faible et très faible diversité ; le cluster 4, très surreprésenté dans la très forte diversité.
+
+```{r clust_dgc_lprop}
+lprop(table(us$clust, us$dgc)) %>% 
+  kable(caption = "Appartenance à un cluster par catégorie de diversité")
+```
+
+### Liens avec les usages de dispositifs
+
+La fréquence médiane d'usage des écoutes guidées est plus faible pour le cluster 1 que pour le 2 et le 4. Les trois autres sont dans des positions intermédiaires.
+
+```{r clust_fq_boxp, fig.cap = "Fréquence d'usage des recommandations par appartenance à un cluster"}
+ggplot(us, aes(clust, fq)) + 
+  geom_boxplot(notch = TRUE) +
+  labs(x = "Cluster", y = "Fréquence d'écoute guidée")
+```
+
+### Lien avec les écoutes
+
+Les clusters 4 et 5 sont ceux qui écoutes le plus souvent des artistes de la long tail (ce qui découle également du fait qu'étant les deux clusters les plus petits, les artistes qu'ils préfèrent sont plus susceptibles d'y être). le cluster 1 en écoute le moins.
+
+Le cluster 4 est le moins porté sur les nouveautés, suivi du 6 et du 5. Le 1 et le 2 sont les plus portés dessus.
+
+Pour les artistes et chanson star : c'est du côté du 1, 2 et 3 que l'écoute est la plus fréquente ; elle est plus faible, environ au même niveau dans les 4, 5 et 6.
+
+```{r clust_pop_boxp, fig.cap = "Popularité des pistes écoutées par appartenance à un cluster", fig.fullwidth = TRUE}
+select(us, clust, freq_star_sng, freq_star_art, freq_longtail_art, freq_nouveaute) %>% 
+  gather(key, value, -clust) %>% 
+  ggplot(aes(clust, value)) + 
+    geom_boxplot(notch = TRUE) +
+    expand_limits(y = 0) +
+    facet_wrap(~key, scales = "free")
+```
+
+# Rythme
+
+```{r genre_semaine_wk, fig.cap = "Part d'écoute consacrée à chaque genre, par heure et par jour"}
+df <- select(st, genre, hour, wday) %>% 
+  filter(!is.na(genre)) %>% 
+  mutate(wd = ifelse(wday %in% c("Sun", "Sat"), "Week-end", "Week day")) %>% 
+  select(-wday) %>% 
+  count(hour, wd, genre) %>% 
+  group_by(hour, wd) %>% 
+  mutate(f = n/sum(n))
+
+ggplot(df, aes(hour, f, color=wd)) +
+  geom_line() +
+  facet_wrap(~genre, scales = "free", ncol = 4) +
+  expand_limits(y = 0)
+
 ```
 
