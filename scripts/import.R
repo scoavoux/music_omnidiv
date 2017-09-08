@@ -316,11 +316,8 @@ context_cat_dic <- c( "tops_album" = "top",
                       "explore_picks_album" = "experts_editor",
                       "explore_region_album" = "experts_editor")
 
-st <- st %>% mutate(context_name = ifelse(fav_song == "Favorite" |
-                                            fav_artist == "Favorite" |
-                                            fav_artist_other_song == "Favorite" |
-                                            fav_album == "Favorite" |
-                                            fav_album_other_song  == "Favorite",
+st <- st %>% mutate(context_name = ifelse((fav_song == "Favorite" | fav_artist == "Favorite" | fav_artist_other_song == "Favorite" | fav_album == "Favorite" | fav_album_other_song  == "Favorite") && 
+                                            (context_name %in% c("search_page", "album_page", "track_page", "playlist_page", "unknown")),
                                           "favorite",
                                           context_name))
 st <- select(st, -starts_with("timestamp_fav"), -starts_with("fav"))
