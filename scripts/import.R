@@ -68,7 +68,8 @@ st <- read_tsv("data/orig/stream.tsv",
                )
 
 ## Supprimer un certain nombre de variables inutilisées
-st <- select(st, -type_stream, -country, -context_id, -app_id, -timestamp_off, -timestamp_sync, -pause, -seek)
+st <- mutate(st, online = factor(is.na(timestamp_off), levels = c(TRUE, FALSE), labels = c("En ligne", "Hors-ligne"))) %>% 
+  select(-type_stream, -country, -context_id, -app_id, -timestamp_off, -timestamp_sync, -pause, -seek)
 
 ## Vérifier que longueur moindre que longueur de la piste
 ## + ajouter année de diffusion
@@ -83,25 +84,6 @@ st$length[st$length < 0] <- NA
 ## Enlever les écoutes avant le 1er avril 2014
 st <- filter(st, (timestamp >= 1396310400 & timestamp < 1420113600) | is.na(timestamp))
 
-## Temps d'écoute: supprimer certains utilisateurs
-
-## Note: Code de Sisley ne documente pas comment elle a fait.
-## Simplement, elle supprime certaines personnes par leur index
-## cf. Database_create.do, l. 26-53
-## Calculer nombre de tracks et temps cumulé d'écoute 
-u <- group_by(st, user_id) %>% 
-  summarize(n = n(),
-            t = sum(length)/(60*60*24))
-
-## Supprimer sur la base ci-dessus (plus de 40000 tracks ou plus de 100h d'écoutes cumulées)
-users_to_remove <- filter(u, n > 4e04 | t > 1e02)
-# ggplot(u, aes(x = n)) + geom_histogram() + scale_x_log10()
-# ggplot(u, aes(x = t)) + geom_histogram() + scale_x_log10()
-
-st <- anti_join(st, users_to_remove, by = "user_id")
-rm(u)
-
-
 # Mettre les données au bon format
 st <- mutate(st, 
              ## Reliquat: pas utilisé; cf. bout de code ci-dessous
@@ -112,6 +94,9 @@ st <- mutate(st,
              # Déjà recodé, on a pas les données brutes annoncées dans le dictionnaire des variables
              app_type = factor(app_type,
                                levels = c("desktop", "mobile", "tablet", "web")),
+             offer_id2 = ifelse(offer_id > 1, 1, offer_id) %>% 
+               factor(levels = 0:1,
+                      labels = c("Free", "Premium")),
              offer_id = ifelse(offer_id > 2, 3, offer_id) %>% 
                factor(levels = 0:3,
                       labels = c("Free", "Premium", "Premium+", "Partenaire")))
@@ -173,11 +158,6 @@ load("data/cities.RData")
 us <- read_tsv("data/orig/orange_user_detail.tsv", 
                col_names = c("user_id", "date_birth", "gender", "date_registered", "city"), 
                col_types = "ccccc")
-# TODO: enlever les valeurs aberrantes (grands nombre de streams; cf. code Sisley)
-
-## Supprimer les individus supprimé de la base streams
-## parce que trop d'écoutes
-us <- anti_join(us, users_to_remove, by = "user_id")
 
 ## Mettre les dates dans le bon format ; calculer l'âge
 us <- mutate_at(us, .vars = vars(starts_with("date_")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd())) %>% 
@@ -209,6 +189,13 @@ us <- count(st, user_id, offer_id) %>%
   select(user_id, offer_id) %>% 
   right_join(us, by = "user_id")
 
+us <- count(st, user_id, offer_id2) %>% 
+  group_by(user_id) %>% 
+  filter(n == max(n)) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  select(user_id, offer_id2) %>% 
+  right_join(us, by = "user_id")
 
 ###### Fav songs ######
 
@@ -376,7 +363,7 @@ us <- group_by(st, user_id) %>%
             passifs = cut(fq, breaks = c(-.1, .00001, 0.8, 1.1), labels = c("Usagers exclusivement actifs", "Usagers mixtes", "Usagers principalement passifs")),
             nb_tracks = n_distinct(sng_id),
             nb_artists = n_distinct(art_id), 
-            volume_ecoute = sum(length), 
+            volume_ecoute = sum(length, na.rm = TRUE), 
             freq_mobile = sum(app_type == "mobile", na.rm = TRUE)/n(),
             freq_desktop = sum(app_type == "desktop", na.rm = TRUE)/n(),
             freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / n(),
@@ -429,7 +416,10 @@ us <- count(st, user_id, context_cat) %>%
   summarize(div_disp = prod(f^f)^-1) %>% 
   right_join(us)
 
-
+## favoris
+us <- mutate(us, 
+             nb_fav_artists = ifelse(is.na(nb_fav_artists), 0, nb_fav_artists),
+             nb_favorites = ifelse(is.na(nb_favorites), 0, nb_favorites))
 ###### Fav albums ######
 
 # alf <- read_tsv("data/orig/album_fav.tsv", 
@@ -437,13 +427,10 @@ us <- count(st, user_id, context_cat) %>%
 #                               "physical_release", "alb_title", "rank", "nb_fans"))
 
 
-###### Clean-up  ######
-## Remove some unused variable so that knitting becomes possible
-gc()
+###### Selection  ######
+source("scripts/filter_users.R")
 
 save(fs, fal, far, file = "data/favorites.RData")
 save(us, file = "data/french_users.RData")
 save(so, ar, file = "data/songs_artists.RData")
 save(st, file = "data/streams.RData")
-
-
