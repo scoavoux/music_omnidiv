@@ -130,7 +130,7 @@ st <- mutate(st,
 sng_pop <- group_by(st, sng_id) %>% 
   summarize(nb_aud_sng = length(unique(user_id))) %>% 
   mutate(sng_pop = cut(nb_aud_sng, 
-                       breaks = rev(quantile(nb_aud_sng, probs = 1 - c(0, 0.001, 0.01, 0.05, 1))),  
+                       breaks = rev(quantile(nb_aud_sng, probs = 1 - c(0, 0.001, 0.01, 0.1, 1))),  
                        labels = c("Long tail", "Lower mid-tail", "Higher mid-tail", "Star"), 
                        include.lowest = TRUE)) %>% 
   select(-nb_aud_sng)
@@ -138,7 +138,7 @@ sng_pop <- group_by(st, sng_id) %>%
 art_pop <- group_by(st, art_id) %>% 
   summarize(nb_aud_art = length(unique(user_id))) %>% 
   mutate(art_pop = cut(nb_aud_art, 
-                       breaks = rev(quantile(nb_aud_art, probs = 1 - c(0, 0.001, 0.01, 0.05, 1))),  
+                       breaks = rev(quantile(nb_aud_art, probs = 1 - c(0, 0.001, 0.01, 0.1, 1))),  
                        labels = c("Long tail", "Lower mid-tail", "Higher mid-tail", "Star"), 
                        include.lowest = TRUE)) %>% 
   select(-nb_aud_art)
