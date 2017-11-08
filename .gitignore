@@ -13,3 +13,5 @@ code_sisley/
 *.todo
 journal.md
 *_cache
+*.png
+resultats/

@@ -37,6 +37,8 @@ Ce document comporte une réplication des analyses du chapitre 6 de la thèse de
 
 # Description du dataset
 
+Dans la thèse, on a 3944 utilisateurs après retraitement des valeurs aberrantes ; nous avons restreint un peu en enlevant les personnes qui ont moins de 100 écoutes (impossible de mesurer des indicateurs standardisés). Cela donne `r nrow(us)` utilisateurs dans notre échantillon.
+
 ## Description des usagers
 
 On ne refait pas l'analyse des pays dans lesquels sont écoutés les pistes, peu intéressantes (usagers français => minorité d'écoutes dans d'autres pays, sans doute liées aux vacances [dataset inclut la période d'été] et déplacements).
@@ -57,7 +59,7 @@ Ainsi, nous avons près de 14% de Parisiens dans les personnes pour lesquelles o
 city_r <- us$city
 city_r[!is.na(us$city)] <- "Autres villes"
 city_r[grep("paris", tolower(us$city))] <- "Paris"
-city_r[grep("lyon|toulouse|marseille|nantes|bordeayx|montpellier|rennes|lille", tolower(us$city))] <- "10 plus grandes villes hors Paris"
+city_r[grep("lyon|toulouse|marseille|nantes|bordeaux|montpellier|rennes|lille|nice|strasbourg", tolower(us$city))] <- "10 plus grandes villes hors Paris"
 
 city_r <- factor(city_r) %>% 
   factor(., levels = rev(levels(.)))
@@ -470,16 +472,36 @@ Nous avons refait les définitions de la popularité des artistes et des chanson
 Les valeurs seuils sont désormais les suivantes. Elles sont considérablement moins élevées pour une chanson.
 
 ```{r seuil_popularite}
-count(st, sng_id, sng_pop) %>% 
+seuils <- list()
+seuils[[1]] <- count(st, sng_id, sng_pop) %>% 
   group_by(sng_pop) %>% 
   arrange(n) %>% 
   slice(1) %>% 
-  select(-sng_id, seuil_piste = n, popularite = sng_pop) %>% 
-  left_join(count(st, art_id, art_pop) %>% 
+  select(-sng_id, seuil_piste = n, popularite = sng_pop)
+seuils[[2]] <- count(st, art_id, art_pop) %>% 
               group_by(art_pop) %>% 
               arrange(n) %>% 
               slice(1) %>% 
-              select(-art_id, seuil_artiste = n, popularite = art_pop)) %>% 
+              select(-art_id, seuil_artiste = n, popularite = art_pop)
+seuils[[3]] <- group_by(st, art_id, art_pop) %>% 
+  summarize(n = length(unique(user_id))) %>% 
+  group_by(art_pop) %>% 
+  filter(n == min(n)) %>% 
+  slice(1) %>% 
+  select(-art_id) %>% 
+  ungroup() %>% 
+  rename(`Nombre minimal d'auditeurs différents_art`= n)
+seuils[[4]] <- group_by(st, art_id, sng_pop) %>% 
+  summarize(n = length(unique(user_id))) %>% 
+  group_by(sng_pop) %>% 
+  filter(n == min(n)) %>% 
+  slice(1) %>% 
+  select(-art_id) %>% 
+  ungroup() %>% 
+  rename(`Nombre minimal d'auditeurs différents_sng`= n)
+
+bind_cols(seuils) %>% 
+  select(-popularite1, -sng_pop, -art_pop) %>% 
   kable(caption = "Nombre d'écoutes nécessaire pour qu'un artiste ou une chanson appartienne à une catégorie de popularité")
   
 ```
