@@ -1,0 +1,470 @@
+---
+title: "Chapitre musimorphose"
+output:
+  tufte::tufte_html: default
+bibliography: /home/vvxf6766/PortKnox/bib/mainlibrary.bib
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = FALSE,
+               warning = FALSE,
+               error = FALSE,
+               message = FALSE)
+
+```
+
+```{r packages}
+library("tidyverse")
+library("broom")
+library("questionr")
+# load lubridate before here (function conflict)
+library("lubridate")
+library(here)
+library(GGally)
+# Options
+theme_set(theme_bw())
+```
+
+```{r data}
+load(here("data", "streams.RData"))
+load(here("data", "french_users.RData"))
+load(here("data", "songs_artists.RData"))
+```
+
+# Un panel d'utilisateurs d'une plateforme de streaming
+
+## Les données collectées
+
+Nombre d'utilisateurs dans l'échantillon : `r nrow(us)` 
+
+```{r tri_plat_genre}
+freq(us$gender) %>% kable(caption = "Distribution du genre")
+```
+
+```{r age_distr}
+summary(us$age) %>% tidy() %>% kable(caption = "Distribution de l'âge")
+```
+
+```{r age_distr_quantile}
+quantile(us$age, na.rm = TRUE, probs = seq(0, 1, .1)) %>% tidy() %>% kable(caption = "Quantiles de la distribution de l'âge")
+```
+
+
+```{r villes}
+## Trop grossier ; commencer par recoder/nettoyer les villes.
+city_r <- us$city
+city_r[!is.na(us$city)] <- "Autres villes"
+city_r[grep("paris", tolower(us$city))] <- "Paris"
+city_r[grep("lyon|toulouse|marseille|nantes|bordeaux|montpellier|rennes|lille|nice|strasbourg", tolower(us$city))] <- "10 plus grandes villes hors Paris"
+
+city_r <- factor(city_r) %>% 
+  factor(., levels = rev(levels(.)))
+freq(city_r) %>% kable(caption = "Distribution des usagers par ville")
+rm(city_r)
+```
+
+```{r}
+freq(us$AUR, cum = TRUE) %>% kable(caption = "Distribution par zone urbaine")
+```
+
+
+
+```{r TP_date_inscription}
+freq(us$anciennete_cat, cum = TRUE, exclude = NA) %>% 
+  kable(caption = "Distribution des usagers par date d'inscription")
+```
+
+Fréquence moyenne d'utilisation du téléphone portable: `r mean(us$freq_mobile)` ;
+Fréquence moyenne d'utilisation du téléphone portable: `r mean(us$freq_desktop)` ;
+
+
+```{r tri_plat_type_abo}
+freq(us$offer_id) %>%  kable(caption = "Distribution des types d'offre employés")
+```
+
+```{r tri_plat_type_abo2}
+freq(us$offer_id2) %>%  kable(caption = "Distribution des types d'offre employés")
+```
+
+```{r support_x_abonnement}
+# st$offer_id2[st$offer_id2 == "Premium+"] <- "Premium"
+# st$offer_id2 <- droplevels(st$offer_id2)
+
+select(us, offer_id2, freq_mobile, freq_desktop) %>% 
+  gather(support, value, -offer_id2) %>% 
+  group_by(offer_id2, support) %>% 
+  summarize(`Fréquence moyenne d'utilisation` = round(mean(value, na.rm=TRUE)*100, 0)) %>% 
+  kable(caption = "Fréquence moyenne d'utilisation des supports par type d'abonnement")
+```
+
+```{r offline_freq}
+filter(st, app_type %in% c("desktop", "mobile")) %>% 
+  count(offer_id2, app_type, online) %>% 
+  group_by(offer_id2, app_type) %>% 
+  mutate(f = round(n / sum(n) *100)) %>% 
+  filter(online == "Hors-ligne") %>% 
+  kable(caption = "Fréquence d'écoute hors-ligne par support et par offre")
+
+```
+
+## Les volumes consommés
+
+Nombre d'écoutes enregistrées: `r nrow(st)`
+
+```{r duree_ecoute}
+freq(st$length < st$duration - 5)
+
+x <- ifelse(st$length <= 30,
+            "Écoute de moins de 30 secondes",
+            ifelse(st$length < st$duration - 10, 
+                   "Écoute arrêtée avant la fin du morceau",
+                   "Écoute jusqu'à la fin du morceau")) %>% 
+  factor()
+  
+freq(x) %>%
+  kable(caption = "Distribution de la durée de l'écoute", digits = 1)
+
+```
+
+```{r}
+x <- filter(st, length > 30) %>% 
+  count(sng_id)
+summary(x$n) %>% 
+  tidy() %>% 
+  kable(caption = "Distribution du nombre d'écoute par titre (base: écoutes de plus de 30 secondes)")
+```
+
+```{r}
+freq(cut(x$n, breaks = c(0, 1, 5, 10, 25, 50, Inf)), cum=TRUE) %>% 
+  kable(caption = "Distribution du nombre d'écoute par titre (base: écoutes de plus de 30 secondes)")
+```
+
+```{r}
+# 5 titres les plus écoutés
+b <- arrange(x, desc(n)) %>% slice(1:5)
+
+filter(st, sng_id %in% b$sng_id) %>% 
+  group_by(sng_id) %>% 
+  summarize(n = length(unique(user_id))) %>% 
+  arrange(n) %>% 
+  kable(caption = "Nombre d'usager unique pour chacune des 5 chansons les plus écoutés")
+
+```
+
+ 
+```{r}
+so[so$sng_id %in% b$sng_id,] %>% 
+  left_join(ar, by = "art_id") %>% 
+  select(sng_title, art_name) %>% 
+  kable(caption = "5 chansons les plus écoutées")
+```
+
+
+```{r summary_volume}
+`.01` <- function(x) quantile(x, 0.01)
+`.10` <- function(x) quantile(x, 0.10)
+`.25` <- function(x) quantile(x, 0.25)
+`.50` <- function(x) quantile(x, 0.50)
+`.75` <- function(x) quantile(x, 0.75)
+`.90` <- function(x) quantile(x, 0.90)
+`.99` <- function(x) quantile(x, 0.99)
+
+group_by(st, user_id) %>% 
+  filter(user_id != "D6ac17cb0636c295308cb668afa844dcfcbb05d30") %>% # Virer le mec qui écoute plus de 24h par jour...
+  summarise(nbe = n(),
+            nbj = n_distinct(yday),
+            epd = nbe / nbj,
+            dpd = sum(length, na.rm = TRUE) / (60 * nbj)) %>% 
+  select(-user_id) %>% 
+  gather(key, value) %>% 
+  group_by(key) %>% 
+  summarize_all(funs(length, mean, median, sd, min, max,`.01`, `.10`, `.25`, `.50`, `.75`, `.90`, `.99`)) %>% 
+  mutate_if(is.numeric, round, 0) %>% 
+  mutate_at(vars(-key, -length), funs(ifelse(key == "dpd", paste0(.%/%60, "h ", .%%60, "m"), .))) %>% 
+  mutate(key = factor(key, 
+                      levels = c("nbe", "nbj", "epd", "dpd"),
+                      labels = c("Nombre d'écoutes totales", "Nombre de jours d'utilisation de la plateforme", "Nombre moyen d'écoutes lors des jours d'utilisation", "Consommation quotidienne de musique (durée d'écoute)"))) %>% 
+  arrange(key) %>% 
+  kable(caption = "Résumé des variables de fréquence d'écoute")
+```
+
+
+Nombre de titres différents: `r length(unique(st$sng_id))`
+
+Nombre d'artistes différents: `r length(unique(st$art_id))`
+
+Nombre d'albums différents: `r length(unique(st$alb_id))`
+
+
+```{r diversite_ecoute}
+# variété individuelle
+group_by(st, user_id) %>% 
+  summarise(nbt = n_distinct(sng_id),
+            nba = n_distinct(art_id)) %>% 
+  select(-user_id) %>% 
+  gather(key, value) %>% 
+  group_by(key) %>% 
+  summarize_all(funs(mean, median, sd, min, max,`.01`, `.10`, `.25`, `.50`, `.75`, `.90`, `.99`)) %>% 
+  mutate_if(is.numeric, round, 0) %>% 
+  mutate_at(vars(-key), funs(ifelse(key == "dpd", paste0(.%/%60, "h ", .%%60, "m"), .))) %>% 
+  mutate(key = factor(key, 
+                      levels = c("nbt", "nba"),
+                      labels = c("Nombre de titres différents écoutés", "Nombre d'artistes différents écoutés"))) %>% 
+  arrange(key) %>% 
+  kable(caption = "Résumé des variables de diversité")
+
+```
+
+```{r correlation_diversite}
+
+cor(select(us, nb_artists, nb_ecoutes, anciennete_days, freq_radio, div_disp, freq_mobile, freq_nouveaute, freq_star_art))
+cor(select(us, nb_artists, age), use = "complete")
+```
+
+
+# Stars vs. Longue traîne
+
+## Popularité
+
+Nous avons refait les définitions de la popularité des artistes et des chansons par rapport à la thèse de Sisley. Les quatre modalités (contre trois auparavant) sont définies ainsi:
+
++ star: la chanson ou l'artiste est dans les 0.1% les plus écoutés
++ higher-midtail: la chanson ou l'artiste est dans les 0.1% à 1% les plus écoutés
++ lower-midtail: la chanson ou l'artiste est dans les 1% à 5% les plus écoutés
++ longtail: la chanson ou l'artiste est dans les 95% les moins écoutés
+
+Les valeurs seuils sont désormais les suivantes. Elles sont considérablement moins élevées pour une chanson.
+
+```{r seuil_popularite}
+seuils <- list()
+seuils[[1]] <- count(st, sng_id, sng_pop) %>% 
+  group_by(sng_pop) %>% 
+  arrange(n) %>% 
+  slice(1) %>% 
+  select(-sng_id, seuil_piste = n, popularite = sng_pop)
+seuils[[2]] <- count(st, art_id, art_pop) %>% 
+              group_by(art_pop) %>% 
+              arrange(n) %>% 
+              slice(1) %>% 
+              select(-art_id, seuil_artiste = n, popularite = art_pop)
+seuils[[3]] <- group_by(st, art_id, art_pop) %>% 
+  summarize(n = length(unique(user_id))) %>% 
+  group_by(art_pop) %>% 
+  filter(n == min(n)) %>% 
+  slice(1) %>% 
+  select(-art_id) %>% 
+  ungroup() %>% 
+  rename(`Nombre minimal d'auditeurs différents_art`= n)
+seuils[[4]] <- group_by(st, art_id, sng_pop) %>% 
+  summarize(n = length(unique(user_id))) %>% 
+  group_by(sng_pop) %>% 
+  filter(n == min(n)) %>% 
+  slice(1) %>% 
+  select(-art_id) %>% 
+  ungroup() %>% 
+  rename(`Nombre minimal d'auditeurs différents_sng`= n)
+
+bind_cols(seuils) %>% 
+  select(-popularite1, -sng_pop, -art_pop) %>% 
+  kable(caption = "Nombre d'écoutes nécessaire pour qu'un artiste ou une chanson appartienne à une catégorie de popularité")
+    
+```
+
+```{r}
+freq(distinct(st, art_id, .keep_all = TRUE)$art_pop) %>% 
+  kable(caption = "Nombre d'artistes")
+```
+
+Paniers et co.
+
+```{r}
+x <- group_by(st, user_id, art_pop) %>% 
+  summarize(n = n(),
+            l = n_distinct(art_id)) %>% 
+  complete(art_pop, fill = list(n = 0, l = 0)) %>% 
+  mutate_at(vars(n, l), funs(./sum(.))) %>% 
+  group_by(art_pop) %>% 
+  select(-user_id) %>% 
+  summarize_all(mean) %>% 
+  gather(key, value, -art_pop) %>% 
+  ungroup() %>% 
+  mutate(art_pop = factor(art_pop, levels = rev(levels(art_pop))),
+         key = factor(key, levels = c("l", "n"), labels = c("Panier", "Fréquence moyenne d'écoute")))
+kable(x, caption = "Composition du panier et fréquence moyenne d'écoute, par popularité des artistes")
+```
+
+
+```{r}
+x <- group_by(st, user_id, art_pop) %>% 
+  summarize(n = n(),
+            l = n_distinct(art_id)) %>% 
+    mutate_at(vars(n, l), funs(./sum(.)))
+x <- select(x, -l) %>% spread(art_pop, n)
+
+freq(x$Star + x$`Higher mid-tail` > 0.8) %>% kable(caption = "Part d'usagers pour lesquels freq star + higher midtail > 0.8")
+freq(x$Star + x$`Higher mid-tail` < 0.2) %>% kable(caption = "Part d'usagers pour lesquels freq star + higher midtail < 0.2")
+freq(x$Star + x$`Higher mid-tail` < 0.001) %>% kable(caption = "Part d'usagers pour lesquels freq star + higher midtail < 0.001")
+freq(x$`Long tail`  < 0.05) %>% kable(caption = "Part d'usagers pour lesquels freq long tail < 0.05")
+freq(x$`Long tail`  > 0.5) %>% kable(caption = "Part d'usagers pour lesquels freq long tail > 0.5")
+```
+
+
+```{r distribution_pop_artistes, fig.cap = "Distribution du nombre d'écoutes par popularité des artistes"}
+us$profil_ecoute <- cut(us$nb_ecoutes, breaks = c(0, quantile(us$nb_ecoutes, c(.25, .75, 1))),
+                        labels = c("Consommation musicale faible (n=954)",
+                                   "Consommation musicale moyenne (n=1906)",
+                                   "Consommation musicale élevée (n=954)"))
+
+x <- group_by(st, user_id, art_pop) %>% 
+  summarize(n = n(),
+            l = n_distinct(art_id)) %>% 
+  complete(art_pop, fill = list(n = 0, l = 0)) %>% 
+  mutate_at(vars(n, l), funs(./sum(.))) %>% 
+  left_join(select(us, user_id, profil_ecoute)) %>% 
+  group_by(profil_ecoute, art_pop) %>% 
+  select(-user_id) %>% 
+  summarize_all(mean) %>% 
+  ungroup() %>% 
+  gather(key, value, -art_pop, -profil_ecoute) %>% 
+    mutate(art_pop = factor(art_pop, levels = rev(levels(art_pop))),
+         key = factor(key, levels = c("l", "n"), labels = c("Panier", "Fréquence moyenne d'écoute")))
+
+ggplot(x, aes(x = key, y=value*100, fill= art_pop)) +
+  geom_bar(stat="identity", position="dodge") +
+  geom_text(aes(label = paste0(round(value *100), "%")), position = position_dodge(width=.95), vjust=-.2) +
+  scale_fill_grey() +
+  facet_wrap(~profil_ecoute) +
+  labs(x = "", y = "Fréquence", fill = "")
+  
+```
+
+
+# Les usages du guidage
+
+## ecoutes autonomes et hétéronomes
+Auditeurs et écoutes sont très inégalement réparties entre les artistes, la plupart d'entre eux n'ayant quasiment 
+
+code | nom
+-----|-----
+**Recommandations personnalisées**| 
+feed_album | albums
+feed_track | titre
+feed_playlist | playlists
+feed_radio | radio éditoriale
+feed_smartradio | radio algorithmique
+**Recommandations sociales**| 
+social | Recommandations sociales
+**Recommendations éditoriales**| 
+experts_editor | Recommendations éditoriales
+**Classements**| 
+top | Classements
+**Nouvelles sorties**| 
+explore_release | Nouvelles sorties
+**Radios**| 
+radio_editoriale | radios éditoriales
+radio_flow | radios "flow"
+smartradio | radios algorithmique
+**Outils contextuels**| 
+artist_disco | discographie de l'artiste
+artist_top | top de l'artiste
+**Moteur de recherche**| 
+search | Moteur de recherche
+**Player (par défaut)**| 
+player_defaut | Player (par défaut)
+**Stock**|
+stock | Catalogue personnel (principalement favoris)
+**Inconnu**|
+ND | non déclaré
+unknown | inconnu
+
+
+
+```{r create_stnq}
+# réduire à écoutes qualifiées
+stnq <- filter(st, !(context_cat %in% c("ND", "unknown") | is.na(context_cat)))
+```
+
+```{r}
+print("nb. écoutes qualifiées")
+
+nrow(stnq)
+```
+
+
+```{r distribution_ecoutes_qualifies}
+group_by(stnq, context_cat) %>% 
+  summarise(n = n(),
+            f = round(n / nrow(stnq)*100, 1),
+            f_hors_stock = round(n / sum(stnq$context_cat != "stock")*100, 1),
+            usagers_distincts = n_distinct(user_id),
+            usage_moyen = round(n/usagers_distincts, 1)) %>% 
+  mutate(f_hors_stock = ifelse(context_cat == "stock", NA, f_hors_stock)) %>% 
+  arrange(n) %>% 
+  kable(caption = "Distribution des dispositifs d'écoutes qualifiées")
+```
+
+## Guidage et diversité
+
+On s'intéresse désormais aux écoutes d'artistes qui n'ont pas été écoutés, ni favoris, auparavant (dans le dataset).
+
+```{r data_premiere_fois}
+## Créer un sous-ensemble de tracks écoutées pour la première fois (artiste écouté pour la première fois & non-favori)
+stpf <- group_by(st, user_id, art_id) %>% 
+  mutate(n_reecoute = n()) %>% 
+  arrange(timestamp) %>% 
+  slice(1) %>% 
+  filter(!(context_cat %in% c("stock", "unknown", "ND")), !is.na(context_cat))
+```
+
+Ces premières écoutes se font environ deux fois plus souvent via les playlists
+
+```{r distribution_dispositif_premiere_ecoute}
+freq(stpf$context_cat, sort = "dec") %>% 
+  kable(caption = "Distribution des dispositifs pour les premières écoutes (première écoute d'un artiste non favori au moment de l'écoute)")
+```
+
+Les premières écoutes qui se font par le top concernent beaucoup plus souvent des artistes stars, logiquement. Idem pour player-default, social, et surtout experts_editor. 
+```{r}
+stpf$context_cat <- droplevels(stpf$context_cat)
+```
+
+
+```{r association_dispositif_popularite_premiereecoute}
+table(stpf$context_cat, stpf$sng_pop) %>% 
+  lprop() %>% 
+  kable(digits = 1, caption = "Association entre dispositif et popularité de l'artiste pour les premières écoutes")
+```
+
+```{r}
+freq(stnq$art_pop) %>% kable(caption = "Distribution de popularité de l'artiste dans les écoutes qualifiées")
+freq(st$art_pop) %>% kable(caption = "Distribution de popularité de l'artiste dans toutes les écoutes")
+freq(stpf$art_pop) %>% kable(caption = "Distribution de popularité de l'artiste dans les premières écoutes")
+```
+
+```{r distribution_nombre_reecoute_par_dispositif_premiereecoute}
+group_by(stpf, context_cat) %>% 
+  summarize(mean = mean(n_reecoute),
+            median = median(n_reecoute),
+            sd = sd(n_reecoute)) %>% 
+  arrange(desc(mean)) %>% 
+  kable(caption = "Distribution du nombre de réécoute par dispositif de première écoute / non_favori")
+```
+
+```{r}
+print("Nombre moyen de réécoutes")
+
+mean(stpf$n_reecoute)
+```
+
+
+```{r distribution_nombre_reecoute_par_dispositif_premiereecoute_pop}
+group_by(stpf, context_cat, art_pop) %>% 
+  summarize(mean = mean(n_reecoute),
+            median = median(n_reecoute),
+            sd = sd(n_reecoute)) %>% 
+  arrange(art_pop, desc(mean)) %>% 
+  group_by(art_pop) %>% 
+  slice(1:5) %>% 
+  kable(caption = "Distribution du nombre de réécoute par dispositif de première écoute / non_favori, seulement les 5 plus forte réécoutes moyennes")
+```

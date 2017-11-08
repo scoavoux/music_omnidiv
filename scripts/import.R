@@ -121,8 +121,8 @@ st <- mutate(st,
 ### On prend les seuils suivants (quantiles)
 ### + 0    ; .001 : star
 ### + .001 ; .01  : higher midtail
-### + .01  ; .05  : lower midtail
-### + .05  ;  1   : long tail
+### + .01  ; .1   : lower midtail
+### + .1  ;  1    : long tail
 
 ## Popularité des titres et artistes
 ### Note: contrairement à ce que dit la doc de dplyr

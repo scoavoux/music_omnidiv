@@ -38,15 +38,6 @@ load("data/french_users.RData")
 
 Dans cette partie, l'individu considéré est l'usager : on travaille donc uniquement sur des variables agrégée à partir des écoutes.
 
-```{r selection_usagers}
-## Enlever les très très gros usagers
-## ainsi que les très faibles usagers
-us <- filter(us, 
-             nb_ecoutes < 10000, 
-             nb_ecoutes > 200,
-             !is.na(nb_ecoutes))
-```
-
 On calcule la part des écoutes guidées dans les écoutes totales. Ce calcul ignore les écoutes dont le contexte est inconnu, soit plus de la moitié d'entre elles. La proportion d'écoutes guidées est donc définie comme:
 
 $$\frac{N_{écoutes\ guidées}}{N_{écoutes\ guidées} + N_{écoutes\ non\ guidées}}$$
