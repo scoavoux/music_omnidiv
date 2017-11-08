@@ -1,0 +1,126 @@
+---
+title: "Diversity growth"
+output:
+  tufte::tufte_html: default
+bibliography: /home/vvxf6766/PortKnox/bib/mainlibrary.bib
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = FALSE,
+               warning = FALSE,
+               error = FALSE,
+               message = FALSE)
+
+```
+
+```{r packages}
+library(tidyverse)
+library(parallel)
+# Options
+theme_set(theme_bw())
+```
+
+```{r}
+load("data/artists_growth.RData")
+load("data/french_users.RData")
+load("data/streams.RData")
+```
+
+```{r}
+y <- group_by(x, users) %>% 
+  summarise(artists = mean(artists))
+
+```
+
+Voici la courbe de la diversité dans des sous-échantillons de notre échantillon.
+
+```{r}
+ggplot(y, aes(users, artists)) +
+  geom_point()
+
+```
+
+Nous savons que cette diversité est bornée par une limite supérieure : le nombre d'artistes total présents dans le catalogue
+
+Soit N la valeur théorique maximale de la diversité dans la population (nombre d'artiste, nombre de pistes, nombre d'albums...) ;
+
+soit y la diversité
+
+soit x le nombre d'usagers considérés dans l'échantillon.
+
+On peut faire l'hypothèse que y suit la loi suivante:
+
+$$y = N * (1-e^{-\alpha x})$$
+
+Dans ce cas, 
+
+$$\frac{y}{N} = (1-e^{-\alpha x})$$
+$$1 - \frac{y}{N} = e^{-\alpha x})$$
+$$ln(1 - \frac{y}{N}) = -\alpha x$$
+
+Ou alors la loi suivante:
+
+$$y = N(1 - e^{-x^\alpha})$$
+
+Dans ce cas, 
+
+$$\frac{y}{N} = 1 - e^{-x^\alpha}$$
+
+
+$$\frac{y}{N} = 1 - e^{-x^\alpha}$$
+
+$$1- \frac{y}{N} = e^{-x^\alpha}$$
+Ou alors pour complexifier la première des lois:
+
+$$y = N * (1-e^{-\alpha x^\beta})$$
+Dans ce cas
+$$ln(1 - \frac{y}{N}) = -ln(\alpha) - \beta*ln(x)$$
+
+
+```{r}
+N <- 3000000
+reg1 <- lm(log(1 - artists/N) ~ users + 0, data = y)
+summary(reg1)
+```
+
+```{r}
+xx <- seq(0, 2000000, 10000)
+plot(xx, N*(1 - exp(1)^(coef(reg1)*xx)))
+```
+
+```{r}
+plot(reg1)
+```
+
+La courbe des prédictions
+```{r}
+ggplot() +
+  geom_point(data = y, aes(users, artists)) +
+  geom_point(data = )
+
+```
+
+```{r}
+# on prend 6M de visiteurs uniques par mois comme la population totale
+sim <- data_frame(users = seq(0, 6000000, by = 10000),
+                  artists = 3800000*(1 -exp(coef(reg1)*users))
+                  )
+ggplot(sim, aes(users, artists)) +
+  geom_line()
+```
+
+## Par semaine?
+
+Si on considère que c'est une simple loi puissance
+
+$$y = x^\alpha$$ 
+
+$$ ln(y) = \alpha * ln(x)$$
+```{r}
+reg1 <- lm(log(artists) ~log(users) + 0, data = y)
+summary(reg1)
+xx <- seq(0, 2000000, 10000)
+plot(xx, xx^coef(reg1))
+```
+
