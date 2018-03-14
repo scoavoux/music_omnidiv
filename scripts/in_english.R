@@ -16,6 +16,6 @@ st <- mutate(st,
                                 Classical = "Classique",
                                 `Hip-hop` = "Rap/Hip Hop",
                                 Electronic = "Electro",
-                                `Movies/video games OST` = "Films/Jeux vidéo"  ))
+                                `Movies/games` = "Films/Jeux vidéo"  ))
 
 
