@@ -101,6 +101,14 @@ st <- mutate(st,
                factor(levels = 0:3,
                       labels = c("Free", "Premium", "Premium+", "Partenaire")))
 
+## First listen of artist
+st <- arrange(st, user_id, art_id, timestamp) %>% 
+  group_by(user_id, art_id) %>% 
+  mutate(n_reecoute_art = n(),
+         first_listen_art = factor(row_number() == 1, levels = c(TRUE, FALSE), labels = c("First artist listen", "Not first artist listen"))) %>% 
+    ungroup() %>% 
+  arrange(timestamp)
+
 
 ## Reliquat du code de Sisley; pas utilisé.
 # st <- st %>%  mutate(activite = case_when(.$type_stream != "MOD" ~ "Passive",
@@ -354,7 +362,11 @@ st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
 us <- group_by(st, user_id) %>% 
   summarise(nb_ecoutes = n(),
             nb_guid = sum(guid == "Guidée", na.rm=TRUE),
+            nb_edit = sum(type_guid == "Guidage", na.rm=TRUE),
+            nb_flux = sum(type_guid == "Flux", na.rm=TRUE),
             fq = nb_guid / sum(!is.na(guid)),
+            fa = nb_flux / sum(!is.na(type_guid)),
+            fe = nb_edit / sum(!is.na(type_guid)),
             fg = sum(type_guid == "Guidage", na.rm=TRUE) / sum(type_guid != "Non guidée" & !is.na(type_guid)),
             ## Passivité: ajouter une modalité quand aucune écoute passive
             passifs = cut(fq, breaks = c(-.1, .00001, 0.8, 1.1), labels = c("Usagers exclusivement actifs", "Usagers mixtes", "Usagers principalement passifs")),
@@ -371,6 +383,8 @@ us <- group_by(st, user_id) %>%
             freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
   right_join(us, by = "user_id")
 us$passifs[us$nb_ecoutes < 100] <- NA
+
+
 ## Diversité des genres écoutés
 
 # On utilise les métriques de la présentation de Robin Lamarche-Perrin et al
@@ -426,6 +440,14 @@ us <- mutate(us,
 
 ###### Selection  ######
 source("scripts/filter_users.R")
+
+## Songs and artists
+ar <- group_by(st, art_id) %>% 
+  summarise(n_listen = n(),
+            n_users = n_distinct(user_id),
+            freq_guid = sum(guid == "Guidée", na.rm=TRUE) / sum(!is.na(guid))) %>% 
+  right_join(ar, by = "art_id")
+
 
 save(fs, fal, far, file = "data/favorites.RData")
 save(us, file = "data/french_users.RData")
