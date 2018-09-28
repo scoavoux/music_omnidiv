@@ -26,6 +26,7 @@ opts_hooks$set(inline = function (x) {
 )
 library(tidyverse)
 library(questionr)
+library(here)
 
 ```
 
@@ -144,8 +145,8 @@ Nous avons changé par rapport à sa thèse la définition de la popularité des
 Le script `scripts/genres_codage.R` prend en entrée les résultats bruts des interrogations de l'API et en sort une base de données des albums auxquels est associé un genre unique par album. Il procède d'abord par élimination/regroupement, pour passer de 91 à 20 genres, puis par définition de priorités de genres, afin de réduire les albums multiclassés jusqu'à ce que l'on obtienne plus qu'un genre par album (au départ, environ 1/3 d'albums ont plusieurs genres, et ils peuvent avoir beaucoup de genres différents).
 
 ```{r genres_load}
-load("../data/genres_raw.RData")
-load("../data/songs_artists.RData")
+load(here("data", "genres_raw.RData"))
+load(here("data", "songs_artists.RData"))
 genres <- bind_rows(l)
 ```
 

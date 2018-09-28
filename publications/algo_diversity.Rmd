@@ -1,9 +1,17 @@
 ---
-title: "Taste and context"
-author: "Samuel Coavoux & Jean-Samuel Beuscart"
+title: "Data analysis for the paper on omnivorism"
+author: "Samuel Coavoux"
 bibliography: /home/vvxf6766/PortKnox/bib/mainlibrary.bib
-output:
-  tufte::tufte_html: default
+output: 
+  pdf_document: 
+    toc: yes
+  html_document: 
+    fig_caption: yes
+    fig_height: 7
+    fig_width: 10
+    keep_md: yes
+    number_sections: yes
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -13,15 +21,20 @@ opts_chunk$set(message = FALSE,
                echo = FALSE,
                warning = FALSE,
                results = 'asis',
-               fig.fullwidth = TRUE)
+               fig.path = "plot/",
+               dpi = 1200)
 ```
 
 <!--
 todo next:
 
-Argument sur technologique favorise la diversité musicale chez Peterson.
+OMNIVORISME INDEX: DIVERSITY OVER 3 CAT BASED ON GENRES.
 
-Revue litt. : avant algo rec., passage sur les intermédiaires.
+HIGHBROW: CLASSIQUE, JAZZ
+MIDDLEBROW: ROCK
+LOWBROW: CHANSON, POP, DANCE, RAP, METAL
+
+UNCLASSIFIED: SOUL, REGGAE, JEUNESSE, R&B, ELECTRO, COUNTRY, MUSICALS, BLUES, ALTERNATIVE
 
 Table des matières dans le RMD
 
@@ -29,55 +42,12 @@ Diversity: quelques tris croisés dans la partie description de la diversité.
 
 Mesures de la diversité: plus précise, etc. ; dispersion de la diversité importante
 
-Quels mécanismes? Temps, etc. montre l'importance du contexte d'écoute.
+Autres analyses à faire:
 
-Sur la variable dépendante: mettre à la fois reco vs. stock et reco algo vs. tout le reste.
++ diversité par taux d'écoute de chaque genre au niveau individuel
++ au niveau individuel, diversité dans les écoutes guidées vs. dans les écoutes non guidées.
++ pondérer diversité par log(us$nb_ecoutes) ? (idem pour comparer au niveau individuel)
 -->
-
-
-# Introduction
-
-Cultural consumption as a boundary marker [@lamont1992a]. => relevance of interrogation on democratisation of cultural consumption.
-
-History of cultural massification, diffusion of culture, is a history of technologies. 19th century: birth of the highbrow/lowbrow distinction [@levine1990] ; of innovations such as cultural institutions with an educational role [@carrier2006] ; also the time of industrial leisure, esp. via newspapers, spread of paperback/pocketsized books [@rabinowitz2014], cinema []. 20th century has seen a chain of innovations, each of which came with a discourse of cultural diffusion: radio, recorded music, television, recorded movies and home cinema, and finally the Internet [références].
-
-Digital turn in cultural consumption [@granjon2007a], esp. for music and tv/movies. Music: piracy and its social dynamics [@beuscart2002_Lesusagersde;@cooper2001_socialorganizationaudio]
-streaming revolution (BIG: chiffres sur prévalence du streaming). Lots of micro approaches of materiality [@magaudda2011_Whenmaterialitybites; @nowak2016_ConsumingMusicDigital]. Complementarity of ways of accessing music[@nowak2016_ConsumingMusicDigital;@aguiar2016_Digitalmusicconsumption]
-
-Hopes in terms not only of wider access, but also on diversity of consumption [@anderson2006_Thelongtail]. Idea that shift from mass production to individual tastes with personalized recommendation ; however, critized by theoretical works: not a real individual, but a network of individual, recommendations based on similarities with other individuals => study "algorithmic individuation" rather than personalization [@prey2017_Nothingpersonalalgorithmic].
-
-Analysis of similar data (probably from same service provider). diversity (exploration in their paper) linked with age, but very high variance. Show that album not listend to integrally [@louail2017_Headphoneswire]
-
-Works on algorithmic recommendation. Many technical researches on algorithms + some researches over users satisfaction. 
-
-Two ways Internet influences diversity. One is catalog: larger choice ; other is lowered search cost, esp. through recommendation [@brynjolfsson2011_GoodbyeParetoprincipe].
-There is a positive effect of recommendations on sales : they affect customer choice [@senecal2004_Theinfluenceof].
-
-Diversity and recommendation tricky question. Esp. what to take into account. Collaborative filtering systems work poorly esp. when data is rare on a user's history [@fleder2009_BlockbusterCulturesNext], but less of a problem with music, where history is usually abundant; More specific to culture: risk of portfolio effect (overspecialized recommendation locking one into their own tastes). Task of finding how much new products to recommend [@konstan2012_RecommendersystemsFrom] ; trust in recommendation depends on context, esp. whether for users to assess the quality of recommendation algorithms [@cooke2002_Marketingtheunfamiliar]
-
-=> effects of algorithms on diversity are not a settled matter. Can increase it [@brynjolfsson2011_GoodbyeParetoprincipe] or lower it [@fleder2009_BlockbusterCulturesNext]. Depends on context, information, and algorithms. Collaborative filtering (based on users' history) tends to pair artists of similar popularity => not the best for long tail [@celma2008_Fromhitsto]. Paradox: aggregate diversity might be lower while individual diversity raises [@fleder2009_BlockbusterCulturesNext]
-
-Effect of streaming vs. local music consumption: increases both overall consumption and diversity [@datta2017_Changingtheirtune]
-
-All those works are from computational social science, economics or marketing. No quantitative work in sociology. Not an issue per se, but we should wonder how this contributes to current debates over social stratification of cultural tastes. Omnivore debate focused on music [@peterson1996; @savage2011; @goldberg2011]. Methodologically, relies on self-declaration of tastes through surveys [@robette2014]. Here, data on actual consumption + detailed data at the track level => better measure of eclecticism.
-
-Omnivorism: taste and context (todo)
-
-# Data and methods
-
-## Data
-
-Our data comes from a music streaming service popular in France. Once registered, users can browse the service for music, add their ``favorite'' artists, albums or tracks to their own library, and listen to playlists and radios, some handpicked by other users or by experts, and others constructed by algorithms. We extracted the record of uses of a random sample of about 4000 French user accounts from all those that were active during the first week of April 2013. After tidying (removal of obvious bot accounts), we have a record of five months' music consumption of 3 813 users. They listened to a bit more than 17M tracks during this time. For each track listened, we have identifying informations (artist, title, album, music genre), as well as a timestamp, the duration of listening, and most importantly the feature used. By feature, we mean the way the user got to listen to a particular track. Possible values can be aggregated to one of four categories: the track was in their personal virtual library or on a personal playlist, they actively searched for it, or they were guided by a recommandation system, whether editorial (editor-picked playlists and radios) or algorithmic.
-
-How we coded genres.
-
-## Method
-
-We use feature as a proxy of algorithm use. To measure diversity, we used a variant Shannon's entropy, or true diversity with $\alpha=1$. For a set $T$ of items, let $p_t$ be the proportion of item $t$ in the overall consumption of a user. Then, that user's diversity is defined as:
-
-$$diversity = (\prod_{t\in T}{p_t^{p_t}})^{-1}$$
-
-It ranks between 1 and the maximum number of available items. We analyse two different measures of diversity: of artists and of genres. This allows to measure for the three dimensions of diversity: variety, balance, and disparity [@stirling2007_Ageneralframework].
 
 ```{r packages}
 library(tidyverse)
@@ -89,7 +59,7 @@ library(stargazer)
 library(gridExtra)
 library(TraMineR)
 library(triversity)
-library(lm.beta)
+library(ggtern)
 loadRData <- function(fileName){
 #loads an RData file, and returns it
     load(fileName)
@@ -104,8 +74,6 @@ load(here("data", "french_users.RData"))
 load(here("data", "songs_artists.RData"))
 load(here("data", "triversity_objects.RData"))
 
-## Streak data
-sts <- loadRData(here("data", "streams_streak.RData"))
 
 
 ## data selection
@@ -124,26 +92,55 @@ source(here("scripts", "in_english.R"))
 
 ```
 
+For computational reasons (compilation time), we remove sequences analyses.
+
+```{r streak_eval}
+streak_eval <- FALSE
+```
+
+
+```{r data_streaks, eval=streak_eval}
+## Streak data
+sts <- loadRData(here("data", "streams_streak.RData"))
+
+```
+
+
 ```{r misc_options}
 if(isTRUE(getOption('knitr.in.progress'))) {
-    output_type <- "html"
+    output_type <- "latex"#
 } else {
     output_type <- "text"
 }
 
 theme_set(theme_bw(base_size = 15))
+
 knit_hooks$set(inline = function(x) {
   prettyNum(x, big.mark=" ")
 })
+options(scipen = 99)
 
 ```
 
+# Data description
 
-# Measuring diversity
+```{r}
+freq(us$gender) %>% 
+  kable(caption="Distribution of gender")
+```
 
-## The long tail
+```{r}
+summary(us$age) %>% 
+  broom::tidy() %>% 
+  kable(caption = "Distribution of age")
+```
 
-As expected, music consumption on our platform is highly concentrated. We do not have a comparable database for non-streamed consumptions (CDs, vynils, local mp3, radios, etc.). However, simple descriptive statistics show a highly skewed distribution of listen. A few artists gather most of the attention. This holds true when examining the number of play songs of that artist gathered, or the number of distinct users who listened to it. The distribution is slightly more skewed for the number of play, showing that stars are not only listened by more people, but also are more listened to overall. The following figure shows the long tail distribution of consumption.
+
+# Concentration of consumption
+
+## The long tail: description and comparison with offline sales
+
+Simple descriptive statistics show a highly skewed distribution of plays. A few artists gather most of the attention. This holds true when examining the number of plays, or the number of distinct users who listened to the artist's songs. The distribution is slightly more skewed for the number of play, showing that stars are not only listened by more people, but also are more listened to overall. The following figure shows the long tail distribution of consumption. The distribution at the song and album level (not shown) follow the same pattern.
 
 ```{r long_tail_plot, fig.cap = "Distribution of artists by # of distinct users and # of listen"}
 gg1 <- arrange(ar, desc(n_listen)) %>%
@@ -168,9 +165,76 @@ grid.arrange(gg1, gg2, ncol = 2)
 
 ```
 
+```{r cdf_longtail_plot, fig.cap = "Cumulative listens ; the plot O Celma uses"}
+br <- c(1, 10, 100, 1000, 10000, 100000)
+filter(ar, !is.na(n_listen)) %>% 
+  arrange(desc(n_listen)) %>% 
+  mutate(n_cum = cumsum(n_listen) / sum(n_listen),
+         rank = row_number()) %>% 
+  ggplot(aes(rank, n_cum)) +
+    geom_point() +
+    scale_x_log10(breaks = br, labels = as.character(br)) +
+    theme(panel.grid.minor.x = element_blank()) +
+    labs(y="Cumulative frequency of play", x = "Artist rank (log scale)")
+
+```
+
+
+```{r long_tail_album, eval=FALSE}
+gg1 <- arrange(al, desc(n_listen)) %>%
+  filter(!is.na(n_listen)) %>% 
+  mutate(rank = 1:n()) %>%
+  ggplot(aes(rank, n_listen)) +
+    geom_point() +
+    geom_line() +
+    labs(x = "Album rank", y = "# of listen (log scale)") +
+    scale_y_log10()
+
+gg2 <- arrange(al, desc(n_users)) %>%
+  filter(!is.na(n_listen)) %>% 
+  mutate(rank = 1:n()) %>%
+  ggplot(aes(rank, n_users)) +
+    geom_point() +
+    geom_line() +
+    labs(x = "Album rank", y = "# of distinct users (log scale)") +
+    scale_y_log10(breaks = c(0, 10, 100, 1000))
+
+grid.arrange(gg1, gg2, ncol = 2)
+```
+
+Despite the problems highlighted infra, we can compare this distribution with offline sales in 2008 as studied by @bourreau2011_Ladiversiteculturelle. We note that the  overall distribution is similar, at least for the metrics that we can replicate, although digital plays are a bit less concentrated at the 50% level.
+
+```{r initialize_album_data}
+df <- count(st, alb_id) %>% 
+  arrange(desc(n)) %>% 
+  mutate(n_cum = cumsum(n) / sum(n))
+
+```
+
+
+```{r table_comparison_bourreau}
+data_frame(` ` = c("Frequency of albums making up to 50% of total sales/play",
+                   "Frequency of albums making up to 80% of total sales/play"),
+           `Physical sales (Bourreau et al., 2011)` = c("0.35%", "6.7%"),
+           `Digital plays (our data)` = paste0(c((sum(df$n_cum < 0.5) / nrow(df) * 100) %>% round(1),
+                                                 (sum(df$n_cum < 0.8) / nrow(df) * 100) %>% round(1)),"%")) %>% 
+  kable(caption = "Comparison of distribution of digital plays (2013) and physical sales (2008)")
+```
+
+```{r check_top_100, eval = FALSE}
+data_frame(`Variable` = c("Top 100", "Top 1000"),
+           `Physical sales (Bourreau et al., 2011)` = c("38%", "64%"),
+           `Digital plays (our data)` = paste0(c((slice(df, 100)$n_cum * 100) %>% round(1), (slice(df, 1000)$n_cum * 100) %>% round(1)), "%")
+) %>% 
+  kable(caption = "Proportion of top 100/1000 albums in total plays")
+
+```
+
 Concentration is usually measured through a Gini index. While we adopt another measure in the rest of the article, they are easier to read, as they range between 0 (total equality) and 1 (total concentration, one artist has all the attention). The very high gini index (table below) indicate high inequalities.
 
-```{r}
+<!-- Sans doute pas la meilleure chose à faire de chercher le Gini plutôt que autre chose. -->
+
+```{r table_gini_concentration}
 data_frame(Metric = c("# of listen",
                       "# of distinct users"),
            Gini = c(reldist::gini(ar$n_listen[!is.na(ar$n_listen)]),
@@ -178,10 +242,9 @@ data_frame(Metric = c("# of listen",
   kable(caption = "Concentration of consumption")
 ```
 
-
 It shall be noted that we did not have access to the full catalog of the music service, but only the tracks listened to by our sample. The service does not release the number of different artists available, but claims to host 35M tracks, of which less than 1M are listened by our sample. This means that there probably are several thousand artists present in the catalog but not used by people from our sample (which should appear in the longer tail of the previous figure).
 
-```{r}
+```{r table_description_catalog}
 data_frame(
   Metric = c("# of distinct artists", "# of distinct tracks"), 
   Sample = c(nrow(distinct(st, art_id)),
@@ -190,9 +253,65 @@ data_frame(
   kable(caption = "Artists and tracks in the catalog and in the sample")
 ```
 
+### The tyranny of popular music
+
+<!-- Maybe add here the number of different users. -->
+
+```{r table_freq_genre}
+x <- filter(st, !is.na(genre)) %>% 
+  group_by(genre) %>% 
+  summarise(`# of plays` = n(),
+            `# of unique artists` = n_distinct(art_id)) %>% 
+  arrange(desc(`# of plays`)) %>% 
+  mutate(`% of plays` = `# of plays`/sum(`# of plays`)*100,
+         `Cumul. % of plays` = cumsum(`% of plays`),
+         `% of unique artists` = `# of unique artists`/sum(`# of unique artists`)*100,
+         `Cumul. % of unique artists` = cumsum(`% of unique artists`))
+
+mutate_at(x, .vars = vars(`% of plays`:`Cumul. % of unique artists`), .funs = funs(paste0(round(., 1), "%"))) %>% 
+  kable(format.args = list(big.mark = " "))
+```
+
+```{r barplot_freq_selected_genres}
+select(x, genre, `% of plays`, `% of unique artists`) %>% 
+  gather(key, value, -genre) %>% 
+  filter(!(genre %in% c("Reggae", "Blues", "Musicals", "Movies/games", "Kids' music"))) %>% 
+  mutate(genre = factor(genre, levels = (x$genre)) %>% droplevels()) %>% 
+  ggplot(aes(genre, value, fill = key)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  labs(y = "Proportion (in %)", x = "Genre", fill = "Metric")
+```
+
+```{r barplot_freq_legit}
+x <- filter(st, !is.na(legit)) %>% 
+  group_by(legit) %>% 
+  summarise(`# of plays` = n(),
+            `# of unique artists` = n_distinct(art_id)) %>% 
+  arrange(desc(`# of plays`)) %>% 
+  mutate(`% of plays` = `# of plays`/sum(`# of plays`)*100,
+         `Cumul. % of plays` = cumsum(`% of plays`),
+         `% of unique artists` = `# of unique artists`/sum(`# of unique artists`)*100,
+         `Cumul. % of unique artists` = cumsum(`% of unique artists`))
+
+select(x, legit, `% of plays`, `% of unique artists`) %>% 
+  gather(key, value, -legit) %>% 
+  ggplot(aes(legit, value, fill = key)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  labs(y = "Proportion (in %)", x = "Legitimacy level", fill = "Metric")
+```
+
+
+```{r table_freq_legit}
+mutate_at(x, .vars = vars(`% of plays`:`Cumul. % of unique artists`), .funs = funs(paste0(round(., 1), "%"))) %>% 
+  kable(format.args = list(big.mark = " "))
+
+```
+
 Analysis of the top artists shows that: they are indeed stars (well known), none are from highbrow genre. Differences between number of play and number of users show that some are more consumed in a devoted sub-population (although it is also quite large) while other are more consensual (listened by everyone, but not as much). Notable representant of the first kind are Jul and Booba (French hip-hop), Eminem and Michael Jackson ; of the second are Lilly Wood And The Prick and Asaf Avidan (folk rock "France Inter" style)
 
-```{r}
+```{r table_top_artists}
 top_li <- arrange(ar, desc(n_listen)) %>% 
   slice(1:50) %>% 
   select(art_name, n_listen, n_users) %>% 
@@ -217,9 +336,31 @@ full_join(top_li, top_us) %>%
 
 ## Diversity
 
+```{r table_basic_description}
+data_frame(`# of distinct users` = nrow(us),
+           `# of distinct plays` = nrow(st),
+           `Mean # of plays a day` = nrow(st) / as.numeric(max(st$timestamp) - min(st$timestamp))) %>% 
+  kable(caption = "Basic descriptive stat")
+```
+
+```{r distribution_nb_ecoutes}
+arrange(us, nb_ecoutes) %>% 
+  mutate(rank = row_number()) %>% 
+  ggplot(aes(rank, nb_ecoutes)) +
+    geom_point()
+```
+
+
+```{r summary_nb_ecoutes}
+summary(us$nb_ecoutes) %>% 
+  broom::tidy() %>% 
+  kable(caption = "Summary stat of # of listen")
+```
+
+
 We now measure diversity with the exponent of Shannon's entropy. Its theoretical maximum is the total number of artists in the base (114 182) and would be the score of a person who had listen to each artist the same number of times. The empirical maximum is of course much lower, at `r max(us$div_artists)`. We first plot the individual diversity of artists. Its distribution is highly skewed to the left: most users have a low diversity, while there is a long tail of high-diversity users. In the remaining of the paper, we will use the log of artist diversity ; we should therefore indicate that its empirical maximum is `r log(max(us$div_artists))`.
 
-```{r, fig.cap = "Distribution of individual artist diversity"}
+```{r plot_individual_artist_div, fig.cap = "Distribution of individual artist diversity"}
 gg1 <- ggplot(us, aes(div_artists)) +
   geom_line(stat="density") +
   labs(y = "Density", x = "Artist diversity")
@@ -233,37 +374,703 @@ grid.arrange(gg1, gg2, ncol = 2)
 
 Genre diversity is much more equally distributed. Its theoretical maximum is 19 (the number of genres) and its empirical one `r max(us$div_genre)`.
 
-```{r, fig.cap = "Distribution of individual genre diversity"}
+```{r plot_individual_genre_div, fig.cap = "Distribution of individual genre diversity"}
 ggplot(us, aes(div_genre)) +
   geom_line(stat="density") +
   xlim(0, 19) +
   labs(y = "Density", x = "Genre diversity")
 ```
 
-# Dynamics of listening at the sequence level: genres and diversity
-
-Genres vary greatly in the use of algorithmic device. A group of four to fiver genres clearly display a lower rate of such use : Musicals, Movies OST, Rap, Kids music, and to some extent "chanson française" (French song). They are chooser's music: when listening to a track from those genres, users know what they want to listen too. This is easily explained for musicals and OST, two categories that are not clearly defined musical genres: users don't really listen to a musical, but rather to "Mozart Opera Rock" or "Les Misérables". Music for kids is less prone to search behavior and more to repetition.
-
-Rap and chanson française are genres in their own right and their presence here is more difficult to interpret, but it is clear that user that listen to those genres are more determined to choose what they are playing.
-
-On the contrary, Blues, Sould, Dance and Jazz are the genres that display the highest use of recommendations. This might come from the fact that they are often used as background music. This is clear for Dance, a genre oriented towards dancing. Jazz consumption is almost only studied in expert consumers, or amateurs (Fabiani, Roueff, Lizé, Hennion, etc.), who are said to be extremely knowledgable about their music. Yet, there are other social uses of jazz, such as background music (for work, in highbrow public places such as luxury shops, etc.).
-
-```{r genre_x_freq_disp_barplot, fig.cap="Frequency of use of recommendation, by music genre"}
-count(st, genre, guid) %>%
-  filter(!is.na(guid)) %>%
-  group_by(genre) %>%
-  mutate(f = n / sum(n)) %>%
-  ungroup() %>%
-  filter(guid == "Guidée", !is.na(genre)) %>%
-  arrange(f) %>%
-  mutate(genre = factor(genre, levels = genre)) %>%
-  ggplot(aes(genre, f)) +
-    geom_col() +
-    labs(y = "Frequency of use of recommendation",
-         x = "Genres") +
-    coord_flip() +
-    ylim(0, 0.4)
+```{r artist_diversity_x_nb_ecoutes}
+ggplot(us, aes(div_artists, nb_ecoutes)) +
+  geom_point() +
+  scale_x_log10() +
+  scale_y_log10() +
+  geom_smooth(method="lm") +
+  labs(x = "Artist diversity (log scale)", y = "# of play (log scale)")
 ```
+
+```{r genre_diversity_x_nb_ecoutes}
+ggplot(us, aes(div_genre, nb_ecoutes)) +
+  geom_point() +
+  scale_y_log10() +
+  geom_smooth(method="lm") +
+  labs(x = "Genre diversity", y = "# of play (log scale)")
+```
+
+# Diversity and recommandation
+
+## Binary link
+
+### Aggregate level
+
+We compare the set of guided listen with the set of unguided listen. Since both sets are of very different size, unguided listen being more important, and since diversity is sensible to sample size, unguided diversity would be much more important than guided diversity if there was not link between guidance and diversity.
+
+Yet, we find that collective guided diversity is more than 1.3 times higher than collective unguided diversity, and that mean individual diversity for guided listen is two times higher than for unguided listen.
+
+At the aggregate level, there is a relation between recommendation and diversity.
+
+```{r table_distribution_stock_reco_play}
+freq(st$guid) %>% 
+  kable(caption = "Distribution of guided/unguided plays")
+```
+
+```{r table_distribution_stock_reco_algo_ed_play}
+freq(st$type_guid) %>% 
+  kable(caption = "Distribution of recommended plays")
+```
+
+
+```{r aggregate_artist_diversity}
+data.frame(Type = c("Collective", "Mean", "N"),
+           Guided = c(get_diversity_from_path(mp_guid, type = "collective", path = c(1, 2), order = 1),
+                      get_diversity_from_path(mp_guid, type = "mean", path = c(1, 2), order = 1),
+                      nrow(filter(st, guid == "Recommended"))),
+           Unguided = c(get_diversity_from_path(mp_noguid, type = "collective", path = c(1, 2), order = 1),
+                        get_diversity_from_path(mp_noguid, type = "mean", path = c(1, 2), order = 1),
+                        nrow(filter(st, guid == "Stock")))) %>%
+  mutate_if(is.numeric, .funs = funs(round(., 1))) %>%
+  kable(caption = "Collective and mean artist diversity of guided and unguided listen")
+```
+
+
+```{r aggregate_genre_diversity}
+data.frame(Type = c("Collective", "Mean", "N"),
+           Guided = c(get_diversity_from_path(mp_guid, type = "collective", path = c(1, 2, 3), order = 1),
+                      get_diversity_from_path(mp_guid, type = "mean", path = c(1, 2, 3), order = 1),
+                      nrow(filter(st, guid == "Recommended"))),
+           Unguided = c(get_diversity_from_path(mp_noguid, type = "collective", path = c(1, 2, 3), order = 1),
+                        get_diversity_from_path(mp_noguid, type = "mean", path = c(1, 2, 3), order = 1),
+                        nrow(filter(st, guid == "Stock")))) %>%
+  mutate_if(is.numeric, .funs = funs(round(., 1))) %>%
+  kable(caption = "Collective and mean genre diversity of guided and unguided listen")
+```
+
+
+### Individual level
+
+At the individual level, it appears that use of recommendation is very concentrated. Most users have a weak use of recommendation and only a few use them very frequently.
+
+```{r diversity_, fig.cap = "Distribution of frequency of use of recommendation"}
+ggplot(us, aes(fq)) +
+  geom_line(stat="density") +
+  labs(y = "Density", x = "Use frequency of recommendations")
+```
+
+The following figures shows the link between recommendation and diversity. While the dispersion is wide, there is a clear upward trend that shows a positive correlation between the two measures.
+
+```{r diversity_X_freq_disp_scatterplot, fig.cap="Diversity by frequency of use of recommendations"}
+select(us, fq, div_artists, div_genre) %>% 
+  mutate(div_artists = log(div_artists)) %>% 
+  gather(key, value, -fq) %>% 
+  mutate(key = ifelse(key == 'div_artists', "Log artist diversity", "Genre diversity")) %>% 
+  ggplot(aes(fq, value)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~key, scales = "free") +
+  labs(x = "Frequency of use of recommendation features",
+       y = "Diversity")
+```
+
+Since the distribution of frequency of use of recommendation is very skewed, we can propose a categorical division to oppose heavy users to non-users. Here, too, we notice a very wide dispersion of diversity in all groups, but the means stays significantly higher in heavy users of recommendation.
+
+
+```{r diversity_X_dip_profile_table}
+filter(us, !is.na(passifs)) %>%
+  group_by(passifs) %>%
+  summarize(`Mean log (artists) diversity (sd)` = paste0(round(mean(log(div_artists)), 1), " (", round(sd(log(div_artists)), 1), ")"),
+            `Mean (genres) diversity (sd)` = paste0(round(mean(div_genre), 1), " (", round(sd(div_genre), 1), ")"),
+            `Mean (omnivore) diversity (sd)` = paste0(round(mean(div_omni), 1), " (", round(sd(div_omni), 1), ")")) %>%
+  rename(` ` = passifs) %>%
+  kable(caption = "Diversity by listener profile")
+```
+
+
+```{r test_div_rec_significance, eval = FALSE}
+## Quelques tests sur la significativté/taille de l'effet de recommendation sur diversité
+filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
+  t.test(div_artists~passifs, data=.)
+
+filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
+  mutate(passifs=droplevels(passifs)) %>% 
+  cohen.d(div_artists~passifs, data=.)
+
+filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
+  t.test(div_genre~passifs, data=.)
+
+filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
+  mutate(passifs=droplevels(passifs)) %>% 
+  cohen.d(div_genre~passifs, data=.)
+
+```
+
+### Intra-individual level
+
+
+```{r intra_individual_guid_diversity_boxplot, fig.cap = "Intra individual variations in artist diversity, by feature"}
+## Changer pour intégrer directement ces variables.
+df <- filter(st, !is.na(guid)) %>% 
+  count(user_id, guid, art_id) %>% 
+  group_by(user_id, guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(N = sum(n),
+            div_art = prod(f^f)^-1) %>% 
+  filter(N>100)
+
+
+## Uniquement ceux qui ont employé les trois dispositifs
+ggplot(group_by(df, user_id) %>% filter(n() == 2), aes(guid, log(div_art))) +
+  geom_boxplot(notch=TRUE) +
+  labs(x = "Type of play", y = "Log artist diversity")
+
+```
+
+Only `r group_by(df, user_id) %>% filter(n() == 2) %>% nrow()` people.
+
+```{r intra_individual_guid_diversity_violinplot, fig.cap = "Intra individual variations in artist diversity, by feature"}
+ggplot(group_by(df, user_id) %>% filter(n() == 2), aes(guid, log(div_art))) +
+  geom_violin(draw_quantiles = c(.25, .5, .75)) +
+  labs(x = "Type of play", y = "Log artist diversity")
+```
+
+
+```{r intra_individual_guid_genre_diversity_boxplot, fig.cap = "Intra individual variations in genre diversity, by feature"}
+df <- filter(st, !is.na(guid)) %>% 
+  count(user_id, guid, genre) %>% 
+  group_by(user_id, guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(N = sum(n),
+            div_genre = prod(f^f)^-1) %>% 
+  filter(N>100)
+
+
+## Uniquement ceux qui ont employé les trois dispositifs
+ggplot(group_by(df, user_id) %>% filter(n() == 2), aes(guid, div_genre)) +
+  geom_boxplot(notch=TRUE) +
+  labs(x = "Type of play", y = "Genre diversity")
+
+
+```
+
+```{r intra_individual_guid_genre_diversity_violinplot, fig.cap = "Intra individual variations in genre diversity, by feature"}
+ggplot(group_by(df, user_id) %>% filter(n() == 2), aes(guid, div_genre)) +
+  geom_violin(draw_quantiles = c(.25, .5, .75))
+
+```
+
+<!-- Attention aux problèmes de comparabilité: avec les seuils, tout le monde n'est pas inclut dans les trois graphes. -->
+
+```{r intra_individual_diversity_boxplot, fig.cap = "Intra_individual variations in artist diversity, by feature"}
+df <- filter(st, !is.na(type_guid)) %>% 
+  count(user_id, type_guid, art_id) %>% 
+  group_by(user_id, type_guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(N = sum(n),
+            div_art = prod(f^f)^-1) %>% 
+  filter(N>100)
+
+
+## Uniquement ceux qui ont employé les trois dispositifs
+ggplot(group_by(df, user_id) %>% filter(n() == 3), aes(type_guid, log(div_art))) +
+  geom_boxplot(notch=TRUE) +
+  labs(x = "Type of recommendation", y = "Log artist diversity")
+
+```
+
+
+```{r intra_individual_diversity_violinplot, fig.cap = "Intra_individual variations in artist diversity, by feature"}
+ggplot(group_by(df, user_id) %>% filter(n() == 3), aes(type_guid, log(div_art))) +
+  geom_violin(draw_quantiles = c(.25, .5, .75)) +
+  labs(x = "Type of recommendation", y = "Log artist diversity")
+
+```
+
+
+```{r intra_individual_genre_diversity_boxplot, fig.cap = "Intra_individual variations in genre diversity, by feature"}
+df <- filter(st, !is.na(type_guid)) %>% 
+  count(user_id, type_guid, genre) %>% 
+  group_by(user_id, type_guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(N = sum(n),
+            div_genre = prod(f^f)^-1) %>% 
+  filter(N>100)
+
+
+## Uniquement ceux qui ont employé les trois dispositifs
+ggplot(group_by(df, user_id) %>% filter(n() == 3), aes(type_guid, div_genre)) +
+  geom_boxplot(notch=TRUE) +
+  labs(x = "Type of recommendation", y = "Genre diversity")
+
+
+```
+
+```{r intra_individual_genre_diversity_violinplot, fig.cap = "Intra_individual variations in genre diversity, by feature"}
+ggplot(group_by(df, user_id) %>% filter(n() == 3), aes(type_guid, div_genre)) +
+  geom_violin(draw_quantiles = c(.25, .5, .75)) +
+  labs(x = "Type of recommendation", y = "Genre diversity")
+
+```
+
+
+### Sequence level
+
+We can apply sequence analysis to guided sequences. Here we defined as guided a sequence where at least one play benefited from recommendation. Inertia rates decline considerably. Their maximum is only 63% (for hip-hop) which means that after 5 tracks, there is only a 1/10 probability of having listened to the same genre 5 times.
+
+```{r sequence_data_import, eval=streak_eval}
+## données avec streaks
+
+sts <- mutate(sts, 
+              guid = fct_recode(guid,
+                                `Recommended` = "Guidée",
+                                `Stock` = "Non guidée"))
+
+sts <- group_by(sts, streak)
+
+
+## Limites de taille de séquence: 5 à 14
+sts <- filter(sts, !is.na(genre)) %>% filter(n() >= 5, n() <= 14)
+sts <- mutate(sts, seq_guid = ifelse(any(guid == "Recommended"), "Recommended", "Stock"))
+
+```
+
+```{r genre_sequences_init_guides, eval=streak_eval}
+x <- filter(sts, seq_guid == "Recommended") %>%
+  summarize(seq = paste(as.character(genre), collapse = ";"))
+sq <- seqdef(x, var = 2, stsep = ";")
+tr <- seqtrate(sq)
+
+## calcul des transition rates
+trm <- as_data_frame(tr) %>% mutate(fr = rownames(tr)) %>%
+  gather(to, value, -fr)
+
+```
+
+```{r genre_transition_rates_inertie_guides, eval=streak_eval}
+filter(trm, str_extract(to, "[\\w&\\s\\/]+") %>% str_trim() == str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>%
+  select(-to) %>%
+  mutate(fr = str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>%
+  arrange(value) %>%
+  left_join(ungroup(sts) %>% count(genre), by = c(fr = "genre")) %>%
+  rename(dispositif = fr,
+         freq_inertie = value,
+         occurences_totales = n) %>%
+  mutate(`prob 5 écoutes successives (f^5)` = freq_inertie^5) %>%
+  kable(caption = "Taux d'inertie des dispositifs dans les séquences (séquences guidées")
+```
+
+Genre with the most inertia are the same as for unguided sequences: rap, classical, reggae and jazz. Small genres are at the bottom of that list, like musicals or soul. Musicals are actually the only genre where it is more probable to have a following track from another genre (pop) rather than a continuous sequence. We see the same underrepresentation of exclusive genres in pop destination, and the same association between electro and dance, rock, metal and alternative, R&B and soul
+
+```{r genre_transition_rates_heatmap_guides, fig.cap = "Transition rate des genres (séquences guidées", fig.fullwidth = TRUE, fig.width = 10, fig.height = 10, eval=streak_eval}
+ggplot(trm, aes(to, fr)) +
+    geom_tile(aes(fill=value)) +
+    geom_text(aes(label = round(value, 2)), label.size = "0.15") +
+    scale_x_discrete(position = "top") +
+    scale_fill_gradient(low = "#FFFFFF", high = "#FF0000") +
+    labs(y = "From", x = "To") +
+    theme(axis.text = element_text(size="110%"), axis.text.x = element_text(angle = 45, hjust= 0)) +
+    coord_fixed()
+```
+
+
+## Associations with other independant variables
+
+Diversity by gender, diversity by age;
+
+diversity by volume of play
+
+Idem pour recommendations: rec by gender, by age, by volume of play
+
+legitimacy levels by gender, by age
+
+There is no difference 
+
+```{r}
+select(us, gender, div_artists, div_genre, div_omni) %>% 
+  filter(!is.na(gender)) %>% 
+  mutate(div_artists = log(div_artists)) %>% 
+  gather(key, value, -gender) %>% 
+  mutate(key = case_when(key == "div_artists" ~ "Log artist diversity",
+                         key == "div_genre" ~ "Genre diversity",
+                         key == "div_omni" ~ "Omnivorism")) %>% 
+  ggplot(aes(gender, value)) +
+    geom_violin() +
+    facet_wrap(~key, scales="free") +
+    labs(x = "Gender", y = "Diversity")
+```
+
+```{r}
+select(us, gender, fq, fe, fa) %>% 
+  filter(!is.na(gender)) %>% 
+  gather(key, value, -gender) %>% 
+  mutate(key = case_when(key == "fq" ~ "Freq. of rec.",
+                         key == "fe" ~ "Freq. of edit. rec.",
+                         key == "fa" ~ "Freq. of algo. rec")) %>% 
+  ggplot(aes(gender, value)) +
+    geom_violin() +
+    facet_wrap(~key, scales="free") +
+    labs(x = "Gender", y = "Recommendations")
+```
+
+
+```{r}
+select(us, gender, Lowbrow:Highbrow) %>% 
+  filter(!is.na(gender)) %>% 
+  gather(key, value, -gender) %>% 
+  ggplot(aes(gender, value)) +
+    geom_violin() +
+    facet_wrap(~key, scales="free") +
+    labs(x = "Gender", y = "Legitimacy")
+```
+
+```{r}
+select(us, age, div_artists, div_genre, div_omni) %>% 
+  filter(!is.na(age), age < 90) %>% 
+  mutate(div_artists = log(div_artists)) %>% 
+  gather(key, value, -age) %>% 
+  mutate(key = case_when(key == "div_artists" ~ "Log artist diversity",
+                         key == "div_genre" ~ "Genre diversity",
+                         key == "div_omni" ~ "Omnivorism")) %>% 
+  ggplot(aes(age, value)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    facet_wrap(~key, scales = "free", nrow = 3) +
+    labs(x = "Age", y = "Diversity")
+```
+
+```{r}
+select(us, age, fq, fe, fa) %>% 
+  filter(!is.na(age), age < 90) %>% 
+  gather(key, value, -age) %>% 
+  mutate(key = case_when(key == "fq" ~ "Freq. of rec.",
+                         key == "fe" ~ "Freq. of edit. rec.",
+                         key == "fa" ~ "Freq. of algo. rec")) %>% 
+  ggplot(aes(age, value)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    facet_wrap(~key, scales = "free", nrow = 3) +
+    labs(x = "Age", y = "Diversity")
+```
+
+```{r}
+select(us, age, Lowbrow:Highbrow) %>% 
+  filter(!is.na(age), age < 90) %>% 
+  gather(key, value, -age) %>% 
+  mutate(key = factor(key, levels = c("Lowbrow", "Middlebrow", "Highbrow"))) %>% 
+  ggplot(aes(age, value)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    facet_wrap(~key, scales = "free", nrow = 3) +
+    labs(x = "Age", y = "Diversity")
+```
+
+
+```{r}
+select(us, nb_ecoutes, div_artists, div_genre, div_omni) %>% 
+  mutate(div_artists = log(div_artists)) %>% 
+  gather(key, value, -nb_ecoutes) %>% 
+  mutate(key = case_when(key == "div_artists" ~ "Log artist diversity",
+                         key == "div_genre" ~ "Genre diversity",
+                         key == "div_omni" ~ "Omnivorism"),
+         nb_ecoutes = log(nb_ecoutes)) %>% 
+  ggplot(aes(nb_ecoutes, value)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    facet_wrap(~key, scales = "free", nrow = 3) +
+    labs(x = "Log volume of play", y = "Diversity")
+```
+
+```{r}
+select(us, nb_ecoutes, fq, fe, fa) %>% 
+  gather(key, value, -nb_ecoutes) %>% 
+  mutate(key = case_when(key == "fq" ~ "Freq. of rec.",
+                         key == "fe" ~ "Freq. of edit. rec.",
+                         key == "fa" ~ "Freq. of algo. rec"),
+         nb_ecoutes = log(nb_ecoutes)) %>% 
+  ggplot(aes(nb_ecoutes, value)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    facet_wrap(~key, scales = "free", nrow = 3) +
+    labs(x = "Log volume of play", y = "Diversity")
+```
+
+```{r}
+select(us, nb_ecoutes, Lowbrow:Highbrow) %>% 
+  gather(key, value, -nb_ecoutes) %>% 
+  mutate(key = factor(key, levels = c("Lowbrow", "Middlebrow", "Highbrow")),
+         nb_ecoutes = log(nb_ecoutes)) %>% 
+  ggplot(aes(nb_ecoutes, value)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    facet_wrap(~key, scales = "free", nrow = 3) +
+    labs(x = "Log volume of play", y = "Legitimacy")
+```
+
+## Modelization
+
+<!--
+Todo, to discuss : est-ce que l'on conserve le nombre d'écoute? Ou est-ce qu'on essaye plutôt d'annuler complétement l'effet en comparant à nombre d'écoutes similaires
+-->
+We model the log of artist diversity because the actual frequency is not normally distributed/is very skewed. The model shows a positive, significant effect of recommendation use on individual diversity for both artist and genre diversity. Artist diversity can better be predicted than genre diversity. 
+
+```{r diversity_lm_table}
+daflm <- lm(log(div_artists) ~ I(fq*100), data = us)
+danlm <- lm(log(div_artists) ~ log(nb_ecoutes), data = us)
+dalm  <- lm(log(div_artists) ~ I(fq*100) + age + gender + I(freq_nouveaute*100) + I(anciennete_days/365) + log(nb_ecoutes), data = us)
+
+dgflm <- lm(div_genre   ~ I(fq*100), data = us)
+dgnlm <- lm(div_genre   ~ log(nb_ecoutes), data = us)
+dglm  <- lm(div_genre   ~ I(fq*100) + age + gender + I(freq_nouveaute*100) + I(anciennete_days/365) + log(nb_ecoutes), data = us)
+
+stargazer(daflm, dalm,
+          dgflm, dglm,
+          covariate.labels = c("Frequency of use of rec. (percentage point)",
+                               "Age (in years)",
+                               "Gender - Male",
+                               "Frequency of novelty (percentage point)",
+                               "Years of subscription of streaming service",
+                               "Log \\# of tracks listened"),
+          dep.var.labels = c("Log of artist diversity", "Genre diversity"),
+          title = "Determinants of diversity (linear models)",
+          type = output_type)
+
+```
+
+```{r violinplot_log_art_div}
+ggplot(us, aes(1, log(div_artists))) + 
+  geom_violin(draw_quantiles = c(.25, .5, .75)) +
+  xlim(0.5, 1.8) +
+  labs(x="", y="Log artist diversity") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank())
+
+```
+
+```{r summary_log_art_div}
+summary(log(us$div_artists)) %>% 
+  broom::tidy() %>% 
+  kable(caption = "Distribution of log artist diversity")
+```
+
+```{r boxplot_div_genre}
+ggplot(us, aes(1, div_genre)) + geom_boxplot()
+```
+
+```{r summary_div_genre}
+summary(us$div_genre) %>% 
+  broom::tidy() %>% 
+  kable(caption = "Distribution of genre diversity")
+```
+
+### Fixed-effect model
+
+```{r}
+select(us, starts_with("div_artists_")) %>% 
+  gather(key, value) %>% 
+  filter(!is.na(value)) %>% 
+  mutate(value = log(value)) %>% 
+  lm(value ~ key, data=.) %>% 
+  stargazer(type = output_type)
+```
+
+```{r}
+pairing <- filter(us, fq < 0.001)
+```
+
+
+## Algorithmic and editorial recommendations
+
+Question dela mesure de fa/fe: sur total du stock? ou total des écoutes?
+```{r distribution_fa_fe_density_plot, fig.cap = "Distribution of frequency of algorithmic/editorial recommendations"}
+# fa et fe: freq algo et freq editorial
+df <- select(us, fa, fe, div_artists, div_genre, nb_ecoutes, passifs) %>% 
+  gather(key, value, -div_artists, -div_genre, -nb_ecoutes, -passifs) %>% 
+  mutate(key = c("fe" = "Editorial recommendation", fa = "Algorithmic recommendation")[key])
+
+ggplot(df, aes(value)) +
+  geom_line(stat="density") + 
+  facet_wrap(~key) +
+  labs(x = "Use frequency of recommendations")
+```
+
+```{r artists_div_x_fa_fe_scatterplot, fig.cap = "Artist diversity by use of algorithmic/editorial recommendation"}
+ggplot(df, aes(value, log(div_artists))) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~key) +
+  labs(x = "Use frequency of recommendations", y ="Log artist diversity")
+
+```
+
+```{r genre_div_x_fa_fe_scatterplot, fig.cap = "Artist diversity by use of algorithmic/editorial recommendation"}
+ggplot(df, aes(value, div_genre)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~key) +
+  labs(x = "Use frequency of recommendations", y ="Genre diversity")
+```
+
+
+```{r lm_algo_editorial_div}
+# using standardized coefficients
+dalm  <-    lm(log(div_artists) ~ I(fe*100) + I(fa*100) + age + gender + I(freq_nouveaute*100) + I(anciennete_days/365) + log(nb_ecoutes), data = us)
+daflm <-    lm(log(div_artists) ~ I(fe*100) + I(fa*100), data = us) 
+
+dglm  <-    lm(div_genre ~ I(fe*100) + I(fa*100) + age + gender + I(freq_nouveaute*100) + I(anciennete_days/365) + log(nb_ecoutes), data = us)
+dgflm <-    lm(div_genre ~ I(fe*100) + I(fa*100), data = us) 
+
+stargazer(dalm, dglm,
+          covariate.labels = c("Frequency of use of edit. rec. (percentage point)",
+                               "Frequency of use of algo. rec. (percentage point)",
+                               "Age (in years)",
+                               "Gender - Male",
+                               "Frequency of novelty (percentage point)",
+                               "Years of subscription of streaming service",
+                               "Log \\# of tracks listened"),
+          dep.var.labels = c("Log of artist diversity", "Genre diversity"),
+          title = "Determinants of diversity (linear models)",
+          type = output_type)
+```
+
+# Omnivorism index
+
+```{r omnivorism_data_preparation2}
+df <- select(st, legit, user_id) %>% 
+  filter(legit != "Unclassified", !is.na(legit)) %>% 
+  count(user_id, legit) %>% 
+  group_by(user_id) %>% 
+  mutate(f = n/sum(n))
+```
+
+```{r omnivorism_index_violinplot, "Distribution of legitimacy levels of plays"}
+ggplot(df, aes(legit, f)) +
+  geom_violin() +
+  labs(x = "Legitimacy level", y = "Frequency")
+
+```
+
+```{r omni_deznsity_plot, fig.cap = "Distribution of omnivorism index"}
+ggplot(us, aes(div_omni)) + 
+  geom_line(stat="density") +
+  labs(x = "Omnivorism index")
+```
+
+
+
+```{r omni_x_fq_scatterplot, fig.cap = "Use frequency of recommendations by legitimacy (individual level)"}
+df <- select(us, Lowbrow:Highbrow, div_omni, fq) %>% 
+  gather(key, value, -fq) %>% 
+  mutate(key = ifelse(key == "div_omni", "Omnivorism index", key) %>% factor(levels = c("Omnivorism index", 
+                                                                                    "Lowbrow",
+                                                                                    "Middlebrow", 
+                                                                                    "Highbrow")))
+
+ggplot(df, aes(value, fq)) + 
+  geom_point() +
+  facet_wrap(~key, scales = "free") +
+  labs(y = "Use frequency of recommendations", x = "Legitimacy or Omnivorism index")
+```
+
+```{r omnivorism_diversity}
+mutate(us, div_artists = log(div_artists)) %>% 
+  select(div_omni, div_artists, div_genre) %>% 
+  gather(key, value, -div_omni) %>% 
+  ggplot(aes(div_omni, value)) +
+    geom_point() +
+    geom_smooth(method="lm") +
+    facet_wrap(~key, scales="free")
+
+```
+
+
+```{r omnivorim_cluster_initialization, fig.cap = "Omnivorism clusters"}
+
+set.seed(1979)
+us$omni_clust[!is.na(us$Lowbrow)] <- kmeans(select(us[!is.na(us$Lowbrow), ], Lowbrow:Highbrow), centers = 4)$clust
+# us$omni_clust <- factor(us$omni_clust, 
+#                          levels = c(3, 2, 4, 1),
+#                          labels = c("Lowbrow univore", "Omnivore", "Middlebrow univore", "Snob"))
+us$omni_clust <- factor(us$omni_clust) #temporary
+
+## Validation nombre de clusters
+# wss <- (nrow(us)-1)*sum(apply(select(us, Lowbrow:Highbrow),2,var))
+# for (i in 2:15) wss[i] <- sum(kmeans(select(us, Lowbrow:Highbrow),
+#    centers=i)$withinss)
+# plot(1:15, wss, type="b", xlab="Number of Clusters",
+#   ylab="Within groups sum of squares")  # 
+
+ggtern(us, aes(Highbrow, Lowbrow, Middlebrow, color=omni_clust)) + 
+  geom_point() +
+  labs(color = "Omnivorism\nclusters")
+```
+
+TODO
+
+```{r omnivorism_cluster_description_active}
+mean_sd <- function(var){
+  m <- mean(var, na.rm = TRUE) %>% round(2)
+  s <- sd(var, na.rm = TRUE)  %>% round(2)
+  return(paste0(m, "(", s, ")"))
+}
+
+select(us, omni_clust, Lowbrow:div_omni) %>% 
+  group_by(omni_clust) %>% 
+  summarise_all(funs(mean_sd)) %>% 
+  gather(key, value, -omni_clust) %>% 
+  spread(omni_clust, value) %>% 
+  kable(caption = "Composition of omnivorism clusters")
+
+```
+
+```{r omnivorism_cluster_description_supplementary}
+
+ocd1 <- select(us, omni_clust, fq, fa, fe, div_artists, div_genre, nb_ecoutes) %>% 
+  group_by(omni_clust) %>% 
+  summarise_all(funs(mean_sd)) %>% 
+  gather(key, value, -omni_clust) %>% 
+  spread(omni_clust, value)
+
+ocd2 <- count(us, omni_clust, gender) %>% 
+  filter(!is.na(gender)) %>% 
+  group_by(omni_clust) %>% 
+  mutate(n = paste0(round(n/sum(n) * 100, 1), "%")) %>% 
+  filter(gender == "F") %>%
+  spread(omni_clust, n) %>% 
+  rename(key = gender)
+
+bind_rows(ocd1, ocd2) %>% 
+  kable(caption = "Omnivorism clusters")
+
+```
+
+```{r omnivorism_lm_models}
+doflm <- lm(div_omni   ~ I(fq*100), data = us)
+donlm <- lm(div_omni   ~ log(nb_ecoutes), data = us)
+dolm  <- lm(div_omni   ~ I(fq*100) + age + gender + I(freq_nouveaute*100) + I(anciennete_days/365) + log(nb_ecoutes), data = us)
+
+stargazer(doflm, dolm,
+          covariate.labels = c("Frequency of use of rec. (percentage point)",
+                               "Age (in years)",
+                               "Gender - Male",
+                               "Frequency of novelty (percentage point)",
+                               "Years of subscription of streaming service",
+                               "Log \\# of tracks listened"),
+          dep.var.labels = c("Omnivorism"),
+          title = "Determinants of diversity (linear models)",
+          type = output_type)
+
+
+```
+
+```{r summary_omnivorism}
+summary(us$div_omni) %>% 
+  broom::tidy() %>% 
+  kable(caption = "Distribution of omnivorism")
+```
+
+
+## Intra-genre diversity
 
 Now, diversity can also be computed for each genre. In the figure below, we compute the aggregate and the mean individual artist diversity for each genre. Individual diversity is computed only on users who listened to at least 50 tracks from that genre. 
 
@@ -313,67 +1120,35 @@ select(df2, genre, mean_ind_div_art) %>%
   coord_flip()
 ```
 
-At the micro level, the data allows to study listening sequences. We isolated sequences of at least 5 succeeding tracks (less than 15 minutes between the end of one track and the beginning of the next one). We then measure genres transition rates: the probability of the next track being of a certain genre given the previous track's genre.
 
-Taste omnivorism predicts that highbrow genres should have lower rates than lowbrow genres (because listeners of highbrow genres are more likely to be omnivores and switch genres more often).
+# Contexts
 
-First, inertia is the rule rather than the exception. For most genres, the succeeding track has more than 1/2 chance to be of the same genre (except for soul and musicals). However, this means that after a few tracks, the probability of listening to the same genre becomes quite low (the maximum being for rap 1/3 chance to be still listening to rap after 5 songs).
+## Use of recommendations by genre
 
-The most popular genres obviously attract the largest part of sequences. This is especially true for pop, the most popular genre, while kids music or metal are barely ever listened outside of an exclusive sequence.
+Genres vary greatly in the use of algorithmic device. A group of four to fiver genres clearly display a lower rate of such use : Musicals, Movies OST, Rap, Kids music, and to some extent "chanson française" (French song). They are chooser's music: when listening to a track from those genres, users know what they want to listen too. This is easily explained for musicals and OST, two categories that are not clearly defined musical genres: users don't really listen to a musical, but rather to "Mozart Opera Rock" or "Les Misérables". Music for kids is less prone to search behavior and more to repetition.
 
-The most exclusive genres are rap, classical music, metal, reggae, and alternative. We see high and lowbrow genres, as well as genres strongly associated with subcultures (metal, reggae).
+Rap and chanson française are genres in their own right and their presence here is more difficult to interpret, but it is clear that user that listen to those genres are more determined to choose what they are playing.
 
-We see a link between dance and electro (both have moderate inertia, but strong exchanges compared to the mean); a link between rock, alternative, with metal and blues as sequence initiator, but not destination (because small N?)
+On the contrary, Blues, Sould, Dance and Jazz are the genres that display the highest use of recommendations. This might come from the fact that they are often used as background music. This is clear for Dance, a genre oriented towards dancing. Jazz consumption is almost only studied in expert consumers, or amateurs (Fabiani, Roueff, Lizé, Hennion, etc.), who are said to be extremely knowledgable about their music. Yet, there are other social uses of jazz, such as background music (for work, in highbrow public places such as luxury shops, etc.).
 
-Rap attracts RnB, World, Soul, Dance, but is itself very exclusive.
-
-Pop is an almost universal attractor, but only almost. THe genres that provides the less proportion of tracks are also the most exclusive: reggae, hip hop, classifical, blues.
-
-```{r sequence_data_import}
-## données avec streaks
-
-sts <- group_by(sts, streak)
-## Limites de taille de séquence: 5 à 14
-sts <- filter(sts, !is.na(genre)) %>% filter(n() >= 5, n() <= 14)
-sts <- mutate(sts, seq_guid = ifelse(any(guid == "Guidée"), "Guidée", "Non guidée"))
-
+```{r genre_x_freq_disp_barplot, fig.cap="Frequency of use of recommendation, by music genre"}
+count(st, genre, guid) %>%
+  filter(!is.na(guid)) %>%
+  group_by(genre) %>%
+  mutate(f = n / sum(n)) %>%
+  ungroup() %>%
+  filter(guid == "Recommended", !is.na(genre)) %>%
+  arrange(f) %>%
+  mutate(genre = factor(genre, levels = genre)) %>%
+  ggplot(aes(genre, f)) +
+    geom_col() +
+    labs(y = "Frequency of use of recommendation",
+         x = "Genres") +
+    coord_flip() +
+    ylim(0, 0.4)
 ```
 
-```{r genre_sequence_init}
-x <- summarize(sts, seq = paste(as.character(genre), collapse = ";"))
-sq <- seqdef(x, var = 2, stsep = ";")
-tr <- seqtrate(sq)
-
-## calcul des transition rates
-trm <- as_data_frame(tr) %>% mutate(fr = rownames(tr)) %>%
-  gather(to, value, -fr)
-```
-
-```{r genre_transition_rates_inertie}
-filter(trm, str_extract(to, "[\\w&\\s\\/]+") %>% str_trim() == str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>%
-  select(-to) %>%
-  mutate(fr = str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>%
-  arrange(value) %>%
-  left_join(ungroup(sts) %>% count(genre), by = c(fr = "genre")) %>%
-  rename(dispositif = fr,
-         freq_inertie = value,
-         occurences_totales = n) %>%
-  mutate(`prob 5 écoutes successives (f^5)` = freq_inertie^5) %>%
-  kable(caption = "Taux d'inertie des genres dans les séquences (toutes les séquences)")
-```
-
-```{r genre_transition_rates_heatmap, fig.cap = "Transition rate des genres (toutes les séquences)", fig.fullwidth = TRUE, fig.width = 10, fig.height = 10}
-ggplot(trm, aes(to, fr)) +
-    geom_tile(aes(fill=value)) +
-    geom_text(aes(label = round(value, 2)), label.size = "0.15") +
-    scale_x_discrete(position = "top") +
-    scale_fill_gradient(low = "#FFFFFF", high = "#FF0000") +
-    labs(y = "From", x = "To") +
-    theme(axis.text = element_text(size="110%"), axis.text.x = element_text(angle = 45, hjust= 0)) +
-    coord_fixed()
-```
-
-## Dynamics/contexts
+## Rythm of recommendation
 
 The analysis of rythms of use of recommendation shows a peak during the day, approximately 10 to 15, every day of the week, with 10:00 and 15:00 being the hours with the highest use. This peaks is less pronounced in the week-end. This constitues another evidence that listening context matter when it comes to use of recommendations.
 
@@ -382,7 +1157,7 @@ The analysis of rythms of use of recommendation shows a peak during the day, app
 st$wday <- wday(st$timestamp, label = TRUE, locale = "en_US.UTF8")
 
 group_by(st, wday, hour) %>% 
-  summarize(g = sum(guid == "Guidée", na.rm = TRUE) / sum(!is.na(guid))) %>% 
+  summarize(g = sum(guid == "Recommended", na.rm = TRUE) / sum(!is.na(guid))) %>% 
   mutate(we = ifelse(wday %in% c("Sat", "Sun"), "Week-end", "Week")) %>% 
   ggplot(aes(x = hour, y = g, color = wday, linetype = we)) +
   geom_line() +
@@ -432,157 +1207,25 @@ ggplot(df, aes(x = hour, y = div, color = wday, linetype = we)) +
 
 ```
 
+## Rythm of legitimacy
 
-# Diversity and recommandation
-
-### Aggregate level
-
-We compare the set of guided listen with the set of unguided listen. Since both sets are of very different size, unguided listen being more important, and since diversity is sensible to sample size, unguided diversity would be much more important than guided diversity if there was not link between guidance and diversity.
-
-Yet, we find that collective guided diversity is more than 1.3 times higher than collective unguided diversity, and that mean individual diversity for guided listen is two times higher than for unguided listen.
-
-At the aggregate level, there is a relation between recommendation and diversity.
-
-```{r aggregate_diversity}
-data.frame(Type = c("Collective", "Mean"),
-           Guided = c(get_diversity_from_path(mp_guid, type = "collective", path = c(1, 2), order = 1),
-                      get_diversity_from_path(mp_guid, type = "mean", path = c(1, 2), order = 1)),
-           Unguided = c(get_diversity_from_path(mp_noguid, type = "collective", path = c(1, 2), order = 1),
-                        get_diversity_from_path(mp_noguid, type = "mean", path = c(1, 2), order = 1))) %>%
-  mutate_if(is.numeric, .funs = funs(round(., 1))) %>%
-  kable(caption = "Collective and mean diveristy of guided and unguided listen")
-```
-
-### Individual level
-
-At the individual level, it appears that use of recommendation is very concentrated. Most users have a weak use of recommendation and only a few use them very frequently.
-
-```{r diversity_, fig.cap = "Distribution of frequency of use of recommendation"}
-ggplot(us, aes(fq)) +
-  geom_line(stat="density") +
-  labs(y = "Density", x = "Use frequency of recommendations")
-```
-
-The following figures shows the link between recommendation and diversity. While the dispersion is wide, there is a clear upward trend that shows a positive correlation between the two measures.
-
-```{r diversity_X_freq_disp_scatterplot, fig.cap="Diversity by frequency of use of recommendations"}
-gg1 <- ggplot(us, aes(fq, log(div_artists))) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  labs(x = "Frequency of use of recommendation features",
-       y = "Log diversity (artists)")
-#+   ylim(0, 750)
-
-gg2 <- ggplot(us, aes(fq, div_genre)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  labs(x = "Frequency of use of recommendation features",
-       y = "Diversity (genres)") +
-  ylim(0, 13)
-
-grid.arrange(gg1, gg2, ncol=2)
-```
-
-Since the distribution of frequency of use of recommendation is very skewed, we can propose a categorical division to oppose heavy users to non-users. Here, too, we notice a very wide dispersion of diversity in all groups, but the means stays significantly higher in heavy users of recommendation.
-
-```{r diversity_X_dip_profile_table}
-filter(us, !is.na(passifs)) %>%
-  group_by(passifs) %>%
-  summarize(`Mean (artists) diversity (sd)` = paste0(round(mean(div_artists), 1), " (", round(sd(div_artists), 1), ")"),
-            `Mean (genres) diversity (sd)` = paste0(round(mean(div_genre), 1), " (", round(sd(div_genre), 1), ")")) %>%
-  rename(` ` = passifs) %>%
-  kable(caption = "Diversity by listener profile")
-```
-
-
-```{r, eval = FALSE}
-## Quelques tests sur la significativté/taille de l'effet de recommendation sur diversité
-filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
-  t.test(div_artists~passifs, data=.)
-
-filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
-  mutate(passifs=droplevels(passifs)) %>% 
-  cohen.d(div_artists~passifs, data=.)
-
-filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
-  t.test(div_genre~passifs, data=.)
-
-filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
-  mutate(passifs=droplevels(passifs)) %>% 
-  cohen.d(div_genre~passifs, data=.)
+```{r rythm_legitimacy, fig.cap = "Rythmic variations of plays by legitimacy status"}
+filter(st, legit != "Unclassified", !is.na(legit)) %>% 
+  count(wday, hour, legit) %>% 
+  group_by(legit, wday) %>% 
+  mutate(f = n/sum(n)) %>% 
+  ungroup() %>% 
+  mutate(we = ifelse(wday %in% c("Sat", "Sun"), "Week-end", "Week")) %>% 
+  ggplot(aes(x = hour, y = f, color = legit, linetype = we)) +
+  geom_line(stat = "summary") +
+  geom_point(stat = "summary") +
+  labs(x = "Hour", 
+       y = "Frequency",
+       color = "Day",
+       linetype = "Week")
 
 ```
 
-### Sequence level
-
-We can apply sequence analysis to guided sequences. Here we defined as guided a sequence where at least one play benefited from recommendation. Inertia rates decline considerably. Their maximum is only 63% (for hip-hop) which means that after 5 tracks, there is only a 1/10 probability of having listened to the same genre 5 times.
-
-```{r genre_sequences_init_guides}
-x <- filter(sts, seq_guid == "Guidée") %>%
-  summarize(seq = paste(as.character(genre), collapse = ";"))
-sq <- seqdef(x, var = 2, stsep = ";")
-tr <- seqtrate(sq)
-
-## calcul des transition rates
-trm <- as_data_frame(tr) %>% mutate(fr = rownames(tr)) %>%
-  gather(to, value, -fr)
-
-```
-
-```{r genre_transition_rates_inertie_guides}
-filter(trm, str_extract(to, "[\\w&\\s\\/]+") %>% str_trim() == str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>%
-  select(-to) %>%
-  mutate(fr = str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>%
-  arrange(value) %>%
-  left_join(ungroup(sts) %>% count(genre), by = c(fr = "genre")) %>%
-  rename(dispositif = fr,
-         freq_inertie = value,
-         occurences_totales = n) %>%
-  mutate(`prob 5 écoutes successives (f^5)` = freq_inertie^5) %>%
-  kable(caption = "Taux d'inertie des dispositifs dans les séquences (séquences guidées")
-```
-
-Genre with the most inertia are the same as for unguided sequences: rap, classical, reggae and jazz. Small genres are at the bottom of that list, like musicals or soul. Musicals are actually the only genre where it is more probable to have a following track from another genre (pop) rather than a continuous sequence. We see the same underrepresentation of exclusive genres in pop destination, and the same association between electro and dance, rock, metal and alternative, R&B and soul
-
-```{r genre_transition_rates_heatmap_guides, fig.cap = "Transition rate des genres (séquences guidées", fig.fullwidth = TRUE, fig.width = 10, fig.height = 10}
-ggplot(trm, aes(to, fr)) +
-    geom_tile(aes(fill=value)) +
-    geom_text(aes(label = round(value, 2)), label.size = "0.15") +
-    scale_x_discrete(position = "top") +
-    scale_fill_gradient(low = "#FFFFFF", high = "#FF0000") +
-    labs(y = "From", x = "To") +
-    theme(axis.text = element_text(size="110%"), axis.text.x = element_text(angle = 45, hjust= 0)) +
-    coord_fixed()
-```
-
-
-## Model
-
-<!--
-Todo, to discuss : est-ce que l'on conserve le nombre d'écoute? Ou est-ce qu'on essaye plutôt d'annuler complétement l'effet en comparant à nombre d'écoutes similaires
--->
-We model the log of artist diversity because the actual frequency is not normally distributed/is very skewed. The model shows a positive, significant effect of recommendation use on individual diversity for both artist and genre diversity. Artist diversity can better be predicted than genre diversity. 
-
-```{r diversity_lm_table}
-daflm <- lm(log(div_artists) ~ I(fq*100), data = us)
-danlm <- lm(log(div_artists) ~ log(nb_ecoutes), data = us)
-dalm  <- lm(log(div_artists) ~ I(fq*100) + age + I(freq_nouveaute*100) + I(anciennete_days/365) + log(nb_ecoutes), data = us)
-
-dglm  <- lm(div_genre   ~ I(fq*100) + age + I(freq_nouveaute*100) + I(anciennete_days/365) + log(nb_ecoutes), data = us)
-dgflm <- lm(div_genre   ~ I(fq*100), data = us)
-
-stargazer(daflm, danlm, dalm,
-          #dgflm, dglm,
-          covariate.labels = c("Frequency of use of rec. (percentage point)",
-                               "Age (in years)",
-                               "Frequency of novelty (percentage point)",
-                               "Years of subscription of streaming service",
-                               "Log # of tracks listened"),
-          dep.var.labels = c("Log of artist diversity", "Genre diversity"),
-          title = "Determinants of diversity (linear models)",
-          type = output_type)
-
-```
 
 ## Discovery vs. durability
 
@@ -593,7 +1236,7 @@ stpf <- filter(st,
                first_listen_art == "First artist listen",
                !(context_cat %in% c("stock", "unknown", "ND")), !is.na(context_cat)) %>%
   mutate(type_guid = fct_recode(type_guid,
-                                `recommendation` = "Flux",
+                                `Algorithmic recommendation` = "Flux",
                                 `Editorial recommendation` = "Guidage",
                                 `Autonomous exploration` = "Non guidée"))
 
@@ -610,54 +1253,74 @@ group_by(stpf, type_guid) %>%
 
 ```
 
-# Algorithmic and editorial recommendations
 
-Question dela mesure de fa/fe: sur total du stock? ou total des écoutes?
-```{r}
-# fa et fe: freq algo et freq editorial
-df <- select(us, fa, fe, div_artists, nb_ecoutes, passifs) %>% 
-  gather(key, value, -div_artists, -nb_ecoutes, -passifs)
+# Leftovers: things that will probably not be in the article
 
-ggplot(df, aes(value)) +
-  geom_line(stat="density") + 
-  facet_wrap(~key)
+## Dynamics of listening at the sequence level: genres and diversity
 
+At the micro level, the data allows to study listening sequences. We isolated sequences of at least 5 succeeding tracks (less than 15 minutes between the end of one track and the beginning of the next one). We then measure genres transition rates: the probability of the next track being of a certain genre given the previous track's genre.
+
+Taste omnivorism predicts that highbrow genres should have lower rates than lowbrow genres (because listeners of highbrow genres are more likely to be omnivores and switch genres more often).
+
+First, inertia is the rule rather than the exception. For most genres, the succeeding track has more than 1/2 chance to be of the same genre (except for soul and musicals). However, this means that after a few tracks, the probability of listening to the same genre becomes quite low (the maximum being for rap 1/3 chance to be still listening to rap after 5 songs).
+
+The most popular genres obviously attract the largest part of sequences. This is especially true for pop, the most popular genre, while kids music or metal are barely ever listened outside of an exclusive sequence.
+
+The most exclusive genres are rap, classical music, metal, reggae, and alternative. We see high and lowbrow genres, as well as genres strongly associated with subcultures (metal, reggae).
+
+We see a link between dance and electro (both have moderate inertia, but strong exchanges compared to the mean); a link between rock, alternative, with metal and blues as sequence initiator, but not destination (because small N?)
+
+Rap attracts RnB, World, Soul, Dance, but is itself very exclusive.
+
+Pop is an almost universal attractor, but only almost. THe genres that provides the less proportion of tracks are also the most exclusive: reggae, hip hop, classifical, blues.
+
+```{r genre_sequence_init, eval=streak_eval}
+x <- summarize(sts, seq = paste(as.character(genre), collapse = ";"))
+sq <- seqdef(x, var = 2, stsep = ";")
+tr <- seqtrate(sq)
+
+## calcul des transition rates
+trm <- as_data_frame(tr) %>% mutate(fr = rownames(tr)) %>%
+  gather(to, value, -fr)
 ```
 
-```{r}
-ggplot(df, aes(value, log(div_artists))) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  facet_wrap(~key)
-
+```{r genre_transition_rates_inertie, eval=streak_eval}
+filter(trm, str_extract(to, "[\\w&\\s\\/]+") %>% str_trim() == str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>%
+  select(-to) %>%
+  mutate(fr = str_extract(fr, "[\\w&\\s\\/]+") %>% str_trim()) %>%
+  arrange(value) %>%
+  left_join(ungroup(sts) %>% count(genre), by = c(fr = "genre")) %>%
+  rename(dispositif = fr,
+         freq_inertie = value,
+         occurences_totales = n) %>%
+  mutate(`prob 5 écoutes successives (f^5)` = freq_inertie^5) %>%
+  kable(caption = "Taux d'inertie des genres dans les séquences (toutes les séquences)")
 ```
 
-```{r}
-mutate(df, ecoutes = quant.cut(nb_ecoutes, nbclass = 5)) %>% 
-  ggplot(aes(value, log(div_artists))) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  facet_grid(key~ecoutes)
+```{r genre_transition_rates_heatmap, fig.cap = "Transition rate des genres (toutes les séquences)", fig.fullwidth = TRUE, fig.width = 10, fig.height = 10, eval=streak_eval}
+ggplot(trm, aes(to, fr)) +
+    geom_tile(aes(fill=value)) +
+    geom_text(aes(label = round(value, 2)), label.size = "0.15") +
+    scale_x_discrete(position = "top") +
+    scale_fill_gradient(low = "#FFFFFF", high = "#FF0000") +
+    labs(y = "From", x = "To") +
+    theme(axis.text = element_text(size="110%"), axis.text.x = element_text(angle = 45, hjust= 0)) +
+    coord_fixed()
 ```
 
+# Présentations visuelles
 
-```{r}
-# using standardized coefficients
-dalm  <-    lm(log(div_artists) ~ I(fe*100) + I(fa*100) + age + I(freq_nouveaute*100) + I(anciennete_days/365) + log(nb_ecoutes), data = us)
-daflm <-    lm(log(div_artists) ~ I(fe*100) + I(fa*100), data = us) 
+```{r camille_dominique}
+df <- data_frame(Name = c("Camille", "Dominique"),
+                 Rap = c(0.1, 0.60),
+                 Classical = c(0.90, 0.4),
+                 Richness = c(2, 2),
+                 `True diversity` = (Rap^Rap*Classical^Classical)^-1)
 
-stargazer(daflm, dalm, 
-          covariate.labels = c("Frequency of use of edit. rec. (percentage point)",
-                               "Frequency of use of algo. rec. (percentage point)",
-                               "Age (in years)",
-                               "Frequency of novelty (percentage point)",
-                               "Years of subscription of streaming service",
-                               "Log # of tracks listened"),
-          dep.var.labels = c("Log of artist diversity", "Genre diversity"),
-          title = "Determinants of diversity (linear models)",
-          type = output_type)
+ggplot() +
+  geom_col(data = gather(df, Genre, Frequency, Rap, Classical), mapping = aes(Name, Frequency, fill=Genre), position = "dodge") +
+  geom_label(data = df, mapping = aes(y = 1, x = Name, label = paste0("Richness = ", Richness, "\nEntropy = ", round(`True diversity`, 2)))) +
+  scale_y_continuous(breaks = seq(0, 1, 0.2))
+  ylim(0, 1.1)
+  
 ```
-
-
-# References
-

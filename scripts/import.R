@@ -1,5 +1,5 @@
 # author: Samuel Coavoux
-# date: avril 2017
+# date: avril 2017-avril 2018
 
 ## Produire une base de données (un ensemble de bases)
 ## propres à partir des données brutes Deezer
@@ -343,6 +343,33 @@ st <- mutate(st,
 st <- left_join(st, select(genres, genre = name, alb_id), by = "alb_id")
 so <- left_join(so, select(genres, genre = name, alb_id), by = "alb_id")
 
+### Genre classification by legitimacy level
+omni_dic <- c(
+  "Classical" = "Highbrow",
+  "Jazz" = "Highbrow",
+  
+  "Rock" = "Middlebrow",
+  "French songs" = "Middlebrow",
+  "World music" = "Middlebrow",
+  "Alternative" = "Middlebrow", 
+  
+  "Hip-hop" = "Lowbrow",
+  "Metal" = "Lowbrow",
+  "Dance" = "Lowbrow",
+  "Pop" = "Lowbrow",
+  "R&B" = "Lowbrow",
+  "Soul" = "Lowbrow",
+  "Electronic" = "Lowbrow",
+  
+  "Kids' music" = "Unclassified",
+  "Musicals" = "Unclassified",
+  "Blues" = "Unclassified",
+  "Country & Folk" = "Unclassified",
+  "Reggae" = "Unclassified", 
+  "Movies/games" = "Unclassified")
+
+st <- mutate(st, legit = omni_dic[genre] %>% factor(levels = c("Lowbrow", "Middlebrow", "Highbrow"))) #Unclassified
+
 ###### Appareiller streams et users######
 st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
                                NA,
@@ -362,6 +389,7 @@ st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
 us <- group_by(st, user_id) %>% 
   summarise(nb_ecoutes = n(),
             nb_guid = sum(guid == "Guidée", na.rm=TRUE),
+            nb_stock = sum(guid == "Non guidée", na.rm=TRUE),
             nb_edit = sum(type_guid == "Guidage", na.rm=TRUE),
             nb_flux = sum(type_guid == "Flux", na.rm=TRUE),
             fq = nb_guid / sum(!is.na(guid)),
@@ -399,33 +427,118 @@ us$passifs[us$nb_ecoutes < 100] <- NA
 us <- count(st, user_id, genre) %>% 
   group_by(user_id) %>% 
   mutate(f = n / sum(n)) %>% 
-  summarize(#div_richness = length(unique(genre)),
-            div_genre = prod(f^f)^-1
-            # div_herfindahl = sum(f^2)^-1,
-            # div_bergerparker = max(f)^-1
-            ) %>% 
-  right_join(us)
+  summarize(div_genre = prod(f^f)^-1) %>% 
+  ungroup() %>% 
+  right_join(us, by = "user_id")
 
 ## Diversité des artistes écoutés
 us <- count(st, user_id, art_id) %>% 
   group_by(user_id) %>% 
   mutate(f = n / sum(n)) %>% 
   summarize(div_artists = prod(f^f)^-1) %>% 
-  right_join(us)
+  ungroup() %>% 
+  right_join(us, by = "user_id")
 
-## Diversité des chansons écoutés
-us <- count(st, user_id, sng_id) %>% 
+## Diversité des niveaux de légitimité
+us <- select(st, legit, user_id) %>% 
+  filter(legit != "Unclassified", !is.na(legit)) %>% 
+  count(user_id, legit) %>% 
   group_by(user_id) %>% 
-  mutate(f = n / sum(n)) %>% 
-  summarize(div_sng = prod(f^f)^-1) %>% 
-  right_join(us)
+  mutate(f = n/sum(n)) %>% 
+  select(-n) %>% 
+  spread(legit, f, fill=0) %>% 
+  mutate(div_omni = ((Highbrow^Highbrow)*(Middlebrow^Middlebrow)*(Lowbrow^Lowbrow))^-1,
+         div_omni_rich = ceiling(Lowbrow) + ceiling(Middlebrow) + ceiling(Highbrow)) %>% 
+  ungroup() %>% 
+  right_join(us, by = "user_id")
 
-## Diversité des dispositifs employés
-us <- count(st, user_id, context_cat) %>% 
-  group_by(user_id) %>% 
-  mutate(f = n / sum(n)) %>% 
-  summarize(div_disp = prod(f^f)^-1) %>% 
-  right_join(us)
+## Diversités stock vs. edit
+### Artists
+us <- filter(st, !is.na(guid)) %>% 
+  count(user_id, guid, art_id) %>% 
+  group_by(user_id, guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(div_art = prod(f^f)^-1) %>% 
+  spread(guid, div_art) %>% 
+  rename(div_artists_stock = "Non guidée",
+         div_artists_rec = "Guidée") %>% 
+  ungroup() %>% 
+  right_join(us, by = "user_id")
+
+us <- filter(st, !is.na(type_guid), type_guid != "Non guidée") %>% 
+  count(user_id, type_guid, art_id) %>% 
+  group_by(user_id, type_guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(div_art = prod(f^f)^-1) %>% 
+  spread(type_guid, div_art) %>% 
+  rename(div_artists_rec_edit = "Guidage",
+         div_artists_rec_algo = "Flux") %>% 
+  ungroup() %>% 
+  right_join(us, by = "user_id")
+
+us <- filter(st, !is.na(guid), !is.na(genre)) %>% 
+  count(user_id, guid, genre) %>% 
+  group_by(user_id, guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(div_genre = prod(f^f)^-1) %>% 
+  spread(guid, div_genre) %>% 
+  rename(div_genre_stock = "Non guidée",
+         div_genre_rec = "Guidée") %>% 
+  ungroup() %>% 
+  right_join(us, by = "user_id")
+
+us <- filter(st, !is.na(type_guid), type_guid != "Non guidée", !is.na(genre)) %>% 
+  count(user_id, type_guid, genre) %>% 
+  group_by(user_id, type_guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(div_genre = prod(f^f)^-1) %>% 
+  spread(type_guid, div_genre) %>% 
+  rename(div_genre_rec_edit = "Guidage",
+         div_genre_rec_algo = "Flux") %>% 
+  ungroup() %>% 
+  right_join(us, by = "user_id")
+
+
+us <- filter(st, !is.na(guid), !is.na(legit)) %>% 
+  count(user_id, guid, legit) %>% 
+  group_by(user_id, guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(div_omni = prod(f^f)^-1) %>% 
+  spread(guid, div_omni) %>% 
+  rename(div_omni_stock = "Non guidée",
+         div_omni_rec = "Guidée") %>% 
+  ungroup() %>% 
+  right_join(us, by = "user_id")
+
+us <- filter(st, !is.na(type_guid), type_guid != "Non guidée", !is.na(legit)) %>% 
+  count(user_id, type_guid, legit) %>% 
+  group_by(user_id, type_guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarise(div_omni = prod(f^f)^-1) %>% 
+  spread(type_guid, div_omni) %>% 
+  rename(div_omni_rec_edit = "Guidage",
+         div_omni_rec_algo = "Flux") %>% 
+  ungroup() %>% 
+  right_join(us, by = "user_id")
+
+
+## Specific diversity not defined where stock/rec too low:
+us <- mutate_at(us, vars(ends_with("_stock")), funs(ifelse(nb_stock < 100, NA, .))) %>% 
+  mutate_at(vars(ends_with("_rev")), funs(ifelse(nb_guid < 100, NA, .)))
+  
+# ## Diversité des chansons écoutés
+# us <- count(st, user_id, sng_id) %>% 
+#   group_by(user_id) %>% 
+#   mutate(f = n / sum(n)) %>% 
+#   summarize(div_sng = prod(f^f)^-1) %>% 
+#   right_join(us)
+# 
+# ## Diversité des dispositifs employés
+# us <- count(st, user_id, context_cat) %>% 
+#   group_by(user_id) %>% 
+#   mutate(f = n / sum(n)) %>% 
+#   summarize(div_disp = prod(f^f)^-1) %>% 
+#   right_join(us)
 
 ## favoris
 us <- mutate(us, 
@@ -448,8 +561,12 @@ ar <- group_by(st, art_id) %>%
             freq_guid = sum(guid == "Guidée", na.rm=TRUE) / sum(!is.na(guid))) %>% 
   right_join(ar, by = "art_id")
 
+al <- group_by(st, alb_id) %>% 
+  summarise(n_listen = n(),
+            n_users = n_distinct(user_id),
+            freq_guid = sum(guid == "Guidée", na.rm=TRUE) / sum(!is.na(guid)))
 
 save(fs, fal, far, file = "data/favorites.RData")
 save(us, file = "data/french_users.RData")
-save(so, ar, file = "data/songs_artists.RData")
+save(so, ar, al, file = "data/songs_artists.RData")
 save(st, file = "data/streams.RData")

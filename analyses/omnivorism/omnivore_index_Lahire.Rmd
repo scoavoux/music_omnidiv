@@ -1,0 +1,207 @@
+---
+title: "Comparisons of legitimacy classification -- LAHIRE"
+author: "Samuel Coavoux"
+date: "4 avril 2018"
+output: html_document
+---
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE,
+               error = FALSE,
+               echo = FALSE,
+               warning = FALSE,
+               results = 'asis',
+               fig.fullwidth = TRUE)
+```
+
+<!--
+todo next:
+
+OMNIVORISME INDEX: DIVERSITY OVER 3 CAT BASED ON GENRES.
+
+HIGHBROW: CLASSIQUE, JAZZ
+MIDDLEBROW: ROCK
+LOWBROW: CHANSON, POP, DANCE, RAP, METAL
+
+UNCLASSIFIED: SOUL, REGGAE, JEUNESSE, R&B, ELECTRO, COUNTRY, MUSICALS, BLUES, ALTERNATIVE
+
+Table des matières dans le RMD
+
+Diversity: quelques tris croisés dans la partie description de la diversité.
+
+Mesures de la diversité: plus précise, etc. ; dispersion de la diversité importante
+
+Autres analyses à faire:
+
++ diversité par taux d'écoute de chaque genre au niveau individuel
++ au niveau individuel, diversité dans les écoutes guidées vs. dans les écoutes non guidées.
++ pondérer diversité par log(us$nb_ecoutes) ? (idem pour comparer au niveau individuel)
+-->
+
+```{r packages}
+library(tidyverse)
+library(lubridate)
+library(here)
+library(forcats)
+library(questionr)
+library(stargazer)
+library(gridExtra)
+library(TraMineR)
+library(triversity)
+library(ggtern)
+```
+
+```{r data}
+load(here("data", "streams.RData"))
+load(here("data", "french_users.RData"))
+load(here("data", "songs_artists.RData"))
+
+source(here("scripts", "in_english.R"))
+
+```
+
+```{r misc_options}
+if(isTRUE(getOption('knitr.in.progress'))) {
+    output_type <- "html"
+} else {
+    output_type <- "text"
+}
+
+theme_set(theme_bw(base_size = 15))
+
+knit_hooks$set(inline = function(x) {
+  prettyNum(x, big.mark=" ")
+})
+
+```
+
+
+```{r omnivorism_data_preparation}
+omni_dic <- c(
+ "Classical" = "Highbrow",
+ "Jazz" = "Highbrow",
+ 
+ "Rock" = "Middlebrow",
+ "French songs" = "Lowbrow",
+ "World music" = "Unclassified",
+ "Alternative" = "Unclassified", 
+ 
+ "Hip-hop" = "Lowbrow",
+ "Metal" = "Lowbrow",
+ "Dance" = "Lowbrow",
+ "Pop" = "Lowbrow",
+ "R&B" = "Lowbrow",
+ "Soul" = "Unclassified",
+ "Electronic" = "Unclassified",
+ 
+ "Kids' music" = "Unclassified",
+ "Musicals" = "Unclassified",
+ "Blues" = "Unclassified",
+ "Country & Folk" = "Unclassified",
+ "Reggae" = "Unclassified", 
+ "Movies/games" = "Unclassified")
+
+df <- mutate(st, omni = omni_dic[genre]) %>% 
+  select(omni, user_id) %>% 
+  filter(omni != "Unclassified", !is.na(omni)) %>% 
+  count(user_id, omni) %>% 
+  group_by(user_id) %>% 
+  mutate(f = n/sum(n),
+         omni = factor(omni, levels = c("Lowbrow", "Middlebrow", "Highbrow")))
+
+usd <- select(df, -n) %>% 
+  spread(omni, f, fill=0) %>% 
+  mutate(omni = ((Highbrow^Highbrow)*(Middlebrow^Middlebrow)*(Lowbrow^Lowbrow))^-1,
+         omni_rich = ceiling(Lowbrow) + ceiling(Middlebrow) + ceiling(Highbrow)) %>% 
+  left_join(us) %>% 
+  ungroup()
+```
+
+```{r omnivorism_index_violinplot, "Distribution of legitimacy levels of plays"}
+ggplot(df, aes(omni, f)) +
+  geom_violin() +
+  labs(x = "Legitimacy level", y = "Frequency")
+
+```
+
+```{r omni_deznsity_plot, fig.cap = "Distribution of omnivorism index"}
+ggplot(usd, aes(omni)) + 
+  geom_line(stat="density") +
+  labs(x = "Omnivorism index")
+```
+
+
+
+```{r omni_x_fq_scatterplot, fig.cap = "Use frequency of recommendations by legitimacy (individual level)"}
+df <- select(usd, Lowbrow:Highbrow, omni, fq) %>% 
+  gather(key, value, -fq) %>% 
+  mutate(key = ifelse(key == "omni", "Omnivorism index", key) %>% factor(levels = c("Omnivorism index", 
+                                                                                    "Lowbrow",
+                                                                                    "Middlebrow", 
+                                                                                    "Highbrow")))
+
+ggplot(df, aes(value, fq)) + 
+  geom_point() +
+  facet_wrap(~key, scales = "free") +
+  labs(y = "Use frequency of recommendations", x = "Legitimacy or Omnivorism index")
+```
+
+```{r omnivorim_cluster_initialization, fig.cap = "Omnivorism clusters"}
+
+set.seed(1979)
+usd$omni_clust <- kmeans(select(usd, Lowbrow:Highbrow), centers = 4)$clust
+# usd$omni_clust <- factor(usd$omni_clust, 
+#                          levels = c(3, 2, 4, 1),
+#                          labels = c("Lowbrow univore", "Omnivore", "Middlebrow univore", "Snob"))
+usd$omni_clust <- factor(usd$omni_clust) #temporary
+
+## Validation nombre de clusters
+# wss <- (nrow(usd)-1)*sum(apply(select(usd, Lowbrow:Highbrow),2,var))
+# for (i in 2:15) wss[i] <- sum(kmeans(select(usd, Lowbrow:Highbrow),
+#    centers=i)$withinss)
+# plot(1:15, wss, type="b", xlab="Number of Clusters",
+#   ylab="Within groups sum of squares")  # 
+
+ggtern(usd, aes(Highbrow, Lowbrow, Middlebrow, color=omni_clust)) + 
+  geom_point() +
+  labs(color = "Omnivorism cluster")
+```
+
+TODO
+
+```{r omnivorism_cluster_description_active}
+mean_sd <- function(var){
+  m <- mean(var, na.rm = TRUE) %>% round(2)
+  s <- sd(var, na.rm = TRUE)  %>% round(2)
+  return(paste0(m, "(", s, ")"))
+}
+
+select(usd, omni_clust, Lowbrow:omni) %>% 
+  group_by(omni_clust) %>% 
+  summarise_all(funs(mean_sd)) %>% 
+  gather(key, value, -omni_clust) %>% 
+  spread(omni_clust, value) %>% 
+  kable(caption = "Composition of omnivorism clusters")
+
+```
+
+```{r omnivorism_cluster_description_supplementary}
+
+ocd1 <- select(usd, omni_clust, fq, fa, fe, div_artists, div_genre, nb_ecoutes) %>% 
+  group_by(omni_clust) %>% 
+  summarise_all(funs(mean_sd)) %>% 
+  gather(key, value, -omni_clust) %>% 
+  spread(omni_clust, value)
+
+ocd2 <- count(usd, omni_clust, gender) %>% 
+  filter(!is.na(gender)) %>% 
+  group_by(omni_clust) %>% 
+  mutate(n = paste0(round(n/sum(n) * 100, 1), "%")) %>% 
+  filter(gender == "F") %>%
+  spread(omni_clust, n) %>% 
+  rename(key = gender)
+
+bind_rows(ocd1, ocd2) %>% 
+  kable(caption = "Omnivorism clusters")
+
+```

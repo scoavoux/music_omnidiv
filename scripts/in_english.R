@@ -18,4 +18,13 @@ st <- mutate(st,
                                 Electronic = "Electro",
                                 `Movies/games` = "Films/Jeux vidéo"  ))
 
+st <- mutate(st, 
+             guid = fct_recode(guid,
+                               `Recommended` = "Guidée",
+                               `Stock` = "Non guidée"))
 
+
+st <- mutate(st, type_guid = fct_recode(type_guid,
+                                        `Algorithmic recommendation` = "Flux",
+                                        `Editorial recommendation` = "Guidage",
+                                        `Stock` = "Non guidée"))

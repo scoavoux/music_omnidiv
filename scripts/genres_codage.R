@@ -121,6 +121,12 @@ genres <- mutate(genres, name = ifelse(name %in% c("Folk", "Country"), "Country 
 ## Supprimer les doublons produits par le processus de recodage
 genres <- distinct(genres, alb_id, name, .keep_all = TRUE)
 
+##
+# x <- count(genres, alb_id)
+# summary(x$n)
+# sum(x$n !=1)/nrow(x)
+# sum(x$n ==2)/nrow(x)
+
 ###### AGRÉGATION DE GENRES ######
 
 # On définit les genres dans l'ordre suivant, correspondant
