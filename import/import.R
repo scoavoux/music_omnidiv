@@ -1,5 +1,6 @@
 # author: Samuel Coavoux
 # date: avril 2017-avril 2018
+# Retapé en décembre 2019 pour les favoris
 
 ## Produire une base de données (un ensemble de bases)
 ## propres à partir des données brutes Deezer
@@ -24,7 +25,7 @@ so <- read_tsv("data/orig/song_catalog.tsv",
 ## Corriger les chansons dont la durée est abérrante (> 2h)
 so <- mutate(so, duration = ifelse(duration > 3600*2, NA, duration)) %>% 
 ## Corriger les dates
-  mutate_at(.vars = vars(ends_with("_release")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd()))
+  mutate_at(.vars = vars(ends_with("_release")), .funs = function(x){ ifelse(x == "null", NA, x) %>% ymd()})
 
 ## On récupère les valeurs manquantes (en tous cas la plupart)
 ## à partir d'un nouveau scraping de Deezer
@@ -34,7 +35,8 @@ load("data/dates_raw.RData")
 dates <- bind_rows(l) %>% 
   mutate(release_date = ifelse(release_date == "0000-00-00", NA, release_date))
 
-so <- left_join(so, dates, by = "alb_id") %>% mutate(release_date = ymd(release_date))
+so <- left_join(so, dates, by = "alb_id") %>% 
+  mutate(release_date = ymd(release_date))
 
 so <-mutate(so, 
            release_date = 
@@ -69,7 +71,7 @@ st <- read_tsv("data/orig/stream.tsv",
 
 ## Supprimer un certain nombre de variables inutilisées
 st <- mutate(st, online = factor(is.na(timestamp_off), levels = c(TRUE, FALSE), labels = c("En ligne", "Hors-ligne"))) %>% 
-  select(-type_stream, -country, -context_id, -app_id, -timestamp_off, -timestamp_sync, -pause, -seek)
+  select(-type_stream, -country, -app_id, -timestamp_off, -timestamp_sync, -pause, -seek)
 
 ## Vérifier que longueur moindre que longueur de la piste
 ## + ajouter année de diffusion
@@ -80,9 +82,6 @@ st <- select(so, sng_id, art_id, alb_id, duration, release_year, nouveaute) %>%
 # 5% de durée d'écoute négative... NA?
 # sum(st$length < 0) / nrow(st)
 st$length[st$length < 0] <- NA
-
-## Enlever les écoutes avant le 1er avril 2014
-st <- filter(st, (timestamp >= 1396310400 & timestamp < 1420113600) | is.na(timestamp))
 
 # Mettre les données au bon format
 st <- mutate(st, 
@@ -100,6 +99,9 @@ st <- mutate(st,
              offer_id = ifelse(offer_id > 2, 3, offer_id) %>% 
                factor(levels = 0:3,
                       labels = c("Free", "Premium", "Premium+", "Partenaire")))
+
+## Enlever les écoutes avant le 1er avril 2014
+st <- filter(st, year(timestamp) == 2014 & month(timestamp) %in% 4L:8L)
 
 ## First listen of artist
 st <- arrange(st, user_id, art_id, timestamp) %>% 
@@ -135,8 +137,9 @@ st <- arrange(st, user_id, art_id, timestamp) %>%
 ## Popularité des titres et artistes
 ### Note: contrairement à ce que dit la doc de dplyr
 ### length(unique(x)) est BCP plus rapide que n_distinct()
+
 sng_pop <- group_by(st, sng_id) %>% 
-  summarize(nb_aud_sng = length(unique(user_id))) %>% 
+  summarize(nb_aud_sng = n_distinct(user_id)) %>% 
   mutate(sng_pop = cut(nb_aud_sng, 
                        breaks = rev(quantile(nb_aud_sng, probs = 1 - c(0, 0.001, 0.01, 0.1, 1))),  
                        labels = c("Long tail", "Lower mid-tail", "Higher mid-tail", "Star"), 
@@ -144,7 +147,7 @@ sng_pop <- group_by(st, sng_id) %>%
   select(-nb_aud_sng)
 
 art_pop <- group_by(st, art_id) %>% 
-  summarize(nb_aud_art = length(unique(user_id))) %>% 
+  summarize(nb_aud_art = n_distinct(user_id)) %>% 
   mutate(art_pop = cut(nb_aud_art, 
                        breaks = rev(quantile(nb_aud_art, probs = 1 - c(0, 0.001, 0.01, 0.1, 1))),  
                        labels = c("Long tail", "Lower mid-tail", "Higher mid-tail", "Star"), 
@@ -152,7 +155,7 @@ art_pop <- group_by(st, art_id) %>%
   select(-nb_aud_art)
 
 st <- left_join(st, sng_pop) %>% left_join(art_pop)
-  
+
 rm(sng_pop, art_pop)
 gc()
 
@@ -168,7 +171,7 @@ us <- read_tsv("data/orig/orange_user_detail.tsv",
                col_types = "ccccc")
 
 ## Mettre les dates dans le bon format ; calculer l'âge
-us <- mutate_at(us, .vars = vars(starts_with("date_")), .funs = funs(ifelse(. == "null", NA, .) %>% ymd())) %>% 
+us <- mutate_at(us, .vars = vars(starts_with("date_")), .funs = function(x){(ifelse(x == "null", NA, x) %>% ymd())}) %>% 
   ## supprimer les plus jeunes (ages aberrants)
   mutate(age = 2013 - year(date_birth),
          age = ifelse(age < 10, NA, age)) %>% 
@@ -230,7 +233,11 @@ us <- count(fs, user_id) %>%
 ## + favori
 
 st <- left_join(st, fs, by = c("user_id", "sng_id")) %>% 
-  mutate(fav_song = factor(ifelse(timestamp_favsong <= timestamp & !is.na(timestamp_favsong), "Favorite", "Not favorite")))
+  mutate(fav_song = factor(ifelse(is.na(timestamp_favsong), 
+                                  "Not favorite", 
+                                  ifelse(timestamp_favsong <= timestamp, 
+                                         "Already favorite",
+                                         "To become favorite"))))
 
 ###### Fav artists ######
 far <- read_tsv("data/orig/fav_artists.tsv",
@@ -249,9 +256,13 @@ st <- left_join(st, filter(far, add == 1) %>%
                   ungroup() %>% 
                   distinct()
 ) %>% 
-  mutate(fav_artist = factor(ifelse(timestamp_favartist <= timestamp & !is.na(timestamp_favartist), "Favorite", "Not favorite"))) %>% 
+  mutate(fav_artist = factor(ifelse(is.na(timestamp_favartist), 
+                                    "Not favorite", 
+                                    ifelse(timestamp_favartist <= timestamp, 
+                                           "Already favorite",
+                                           "To become favorite")))) %>% 
   group_by(user_id, art_id) %>% 
-  mutate(fav_artist_other_song = factor(ifelse(any(fav_artist == "Favorite"), min(timestamp), 9999999999) <= timestamp, 
+  mutate(fav_artist_other_song = factor(ifelse(any(fav_artist == "Already favorite"), min(timestamp), 9999999999) <= timestamp, 
                                         levels = c(TRUE, FALSE), 
                                         labels = c("Favorite", "Not favorite"))) %>% 
   ungroup()
@@ -268,9 +279,13 @@ st <- left_join(st,
                   ungroup() %>% 
                   distinct()
 ) %>% 
-  mutate(fav_album = factor(ifelse(timestamp_favalbum <= timestamp & !is.na(timestamp_favalbum), "Favorite", "Not favorite"))) %>% 
+  mutate(fav_album = factor(ifelse(is.na(timestamp_favalbum), 
+                                   "Not favorite", 
+                                   ifelse(timestamp_favalbum <= timestamp, 
+                                          "Already favorite",
+                                          "To become favorite")))) %>% 
   group_by(user_id, alb_id) %>% 
-  mutate(fav_album_other_song = factor(ifelse(any(fav_album == "Favorite"), min(timestamp), 9999999999) <= timestamp, 
+  mutate(fav_album_other_song = factor(ifelse(any(fav_album == "Already favorite"), min(timestamp), 9999999999) <= timestamp, 
                                        levels = c(TRUE, FALSE), 
                                        labels = c("Favorite", "Not favorite"))) %>% 
   ungroup()
@@ -317,17 +332,26 @@ context_cat_dic <- c( "tops_album" = "top",
                       "search_page" = "search",
                       "album_page" = "ND",
                       "track_page" = "ND",
-                      "playlist_page" = "ND",
+                      "playlist_page" = "playlist_page",
                       "unknown" = "unknown",
                       "player_default_playlist" = "player_defaut",
                       "selection_album" = "experts_editor",
                       "explore_picks_album" = "experts_editor",
                       "explore_region_album" = "experts_editor")
 
-st <- st %>% mutate(context_name = ifelse((fav_song == "Favorite" | fav_artist == "Favorite" | fav_artist_other_song == "Favorite" | fav_album == "Favorite" | fav_album_other_song  == "Favorite") & 
-                                            context_name %in% c("search_page", "album_page", "track_page", "playlist_page", "unknown"),
+### Changement important par rapport à la première version (Réseaux)
+### = on ne considère plus que favori + playlist = Stock
+### + on conserve playlist_page dans context_cat
+# st <- st %>% mutate(context_name = ifelse((fav_song == "Already favorite" | fav_artist == "Already favorite" | fav_artist_other_song == "Already favorite" | fav_album == "Already favorite" | fav_album_other_song  == "Already favorite") & 
+#                                             context_name %in% c("search_page", "album_page", "track_page", "playlist_page", "unknown"),
+#                                           "favorite",
+#                                           context_name))
+
+st <- st %>% mutate(context_name = ifelse((fav_song == "Already favorite" | fav_artist == "Already favorite" | fav_artist_other_song == "Already favorite" | fav_album == "Already favorite" | fav_album_other_song  == "Already favorite") &
+                                            context_name %in% c("search_page", "album_page", "track_page", "unknown"),
                                           "favorite",
                                           context_name))
+
 st <- select(st, -starts_with("timestamp_fav"), -starts_with("fav"))
 gc()
 st$context_cat <- factor(context_cat_dic[st$context_name])
@@ -370,10 +394,16 @@ omni_dic <- c(
 
 st <- mutate(st, legit = omni_dic[genre] %>% factor(levels = c("Lowbrow", "Middlebrow", "Highbrow"))) #Unclassified
 
-###### Appareiller streams et users######
+### Il reste un gros problème à résoudre par du scraping.
+### Pour le moment, les playlists dominent, mais on ne sait pas
+### si ce sont des playlists personnelles ou du guidage
+### => il faut les scrapper ID par ID.
+### Puis revoir le code ci-dessous
+### Playlist personnelle => stock
+### Playlist autres/institutionnelles => guidage
 st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
                                NA,
-                               ifelse(context_cat %in% c("stock", "search", "artist_disco", "artist_top", "ND", "unknown") | is.na(context_cat), # que faire de artist_top
+                               ifelse(context_cat %in% c("stock", "search", "artist_disco", "artist_top") | is.na(context_cat), # que faire de artist_top
                                       "Non guidée",
                                       "Guidée")) %>% 
                factor(),
@@ -385,6 +415,8 @@ st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
                                               "Guidage", 
                                               "Flux"))) %>% 
                factor()) 
+
+###### Appareiller streams et users######
 
 us <- group_by(st, user_id) %>% 
   summarise(nb_ecoutes = n(),
@@ -425,6 +457,7 @@ us$passifs[us$nb_ecoutes < 100] <- NA
 # Propriétés: maximum = nombre de genres disponibles
 # 
 us <- count(st, user_id, genre) %>% 
+  filter(!is.na(genre)) %>% 
   group_by(user_id) %>% 
   mutate(f = n / sum(n)) %>% 
   summarize(div_genre = prod(f^f)^-1) %>% 
