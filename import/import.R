@@ -9,11 +9,12 @@
 library(tidyverse)
 library(lubridate)
 library(stringr)
+library(here)
 
 ###### Genres ######
 ## Produire le fichier des genres:
 # source("scripts/genres_codage.R")
-load("data/genres.RData")
+load(here("data", "genres.RData"))
 
 ###### Songs ######
 
@@ -31,7 +32,8 @@ so <- mutate(so, duration = ifelse(duration > 3600*2, NA, duration)) %>%
 ## à partir d'un nouveau scraping de Deezer
 ## à refaire un jour en refaisant le scrapping genres...
 ## pour avoir vraiment toutes les dates de la même source
-load("data/dates_raw.RData")
+load(here("data", "dates_raw.RData"))
+
 dates <- bind_rows(l) %>% 
   mutate(release_date = ifelse(release_date == "0000-00-00", NA, release_date))
 
@@ -68,6 +70,7 @@ st <- read_tsv("data/orig/stream.tsv",
                # Prévoir la possibilité de réduire la taille du fichier pour l'exploration interactive en local
                , n_max = NMAX
                )
+rm(NMAX)
 
 ## Supprimer un certain nombre de variables inutilisées
 st <- mutate(st, online = factor(is.na(timestamp_off), levels = c(TRUE, FALSE), labels = c("En ligne", "Hors-ligne"))) %>% 
@@ -81,7 +84,7 @@ st <- select(so, sng_id, art_id, alb_id, duration, release_year, nouveaute) %>%
 
 # 5% de durée d'écoute négative... NA?
 # sum(st$length < 0) / nrow(st)
-st$length[st$length < 0] <- NA
+st <- mutate(st, length = ifelse(length < 0, NA, length))
 
 # Mettre les données au bon format
 st <- mutate(st, 
@@ -104,12 +107,12 @@ st <- mutate(st,
 st <- filter(st, year(timestamp) == 2014 & month(timestamp) %in% 4L:8L)
 
 ## First listen of artist
-st <- arrange(st, user_id, art_id, timestamp) %>% 
-  group_by(user_id, art_id) %>% 
-  mutate(n_reecoute_art = n(),
-         first_listen_art = factor(row_number() == 1, levels = c(TRUE, FALSE), labels = c("First artist listen", "Not first artist listen"))) %>% 
-    ungroup() %>% 
-  arrange(timestamp)
+# st <- arrange(st, user_id, art_id, timestamp) %>% 
+#   group_by(user_id, art_id) %>% 
+#   mutate(n_reecoute_art = n(),
+#          first_listen_art = factor(row_number() == 1, levels = c(TRUE, FALSE), labels = c("First artist listen", "Not first artist listen"))) %>% 
+#     ungroup() %>% 
+#   arrange(timestamp)
 
 
 ## Reliquat du code de Sisley; pas utilisé.
@@ -164,7 +167,7 @@ gc()
 ###### Users ######
 
 # source("scripts/localisation.R")
-load("data/cities.RData")
+load(here("data", "cities.RData"))
 
 us <- read_tsv("data/orig/orange_user_detail.tsv", 
                col_names = c("user_id", "date_birth", "gender", "date_registered", "city"), 
@@ -255,17 +258,18 @@ st <- left_join(st, filter(far, add == 1) %>%
                   mutate(timestamp_favartist = min(timestamp_favartist)) %>% 
                   ungroup() %>% 
                   distinct()
-) %>% 
-  mutate(fav_artist = factor(ifelse(is.na(timestamp_favartist), 
+) 
+st <- mutate(st, fav_artist = factor(ifelse(is.na(timestamp_favartist), 
                                     "Not favorite", 
                                     ifelse(timestamp_favartist <= timestamp, 
                                            "Already favorite",
-                                           "To become favorite")))) %>% 
-  group_by(user_id, art_id) %>% 
-  mutate(fav_artist_other_song = factor(ifelse(any(fav_artist == "Already favorite"), min(timestamp), 9999999999) <= timestamp, 
-                                        levels = c(TRUE, FALSE), 
-                                        labels = c("Favorite", "Not favorite"))) %>% 
-  ungroup()
+                                           "To become favorite")))) #%>% 
+# On supprimer le fav_artist_other song parce que ca n'a pas de sens
+    # group_by(user_id, art_id) %>% 
+  # mutate(fav_artist_other_song = factor(ifelse(any(fav_artist == "Already favorite"), min(timestamp), 9999999999) <= timestamp, 
+  #                                       levels = c(TRUE, FALSE), 
+  #                                       labels = c("Favorite", "Not favorite"))) %>% 
+  # ungroup()
 
 ###### Fav albums ######
 fal <- read_tsv("data/orig/fav_albums.tsv",
@@ -283,12 +287,12 @@ st <- left_join(st,
                                    "Not favorite", 
                                    ifelse(timestamp_favalbum <= timestamp, 
                                           "Already favorite",
-                                          "To become favorite")))) %>% 
-  group_by(user_id, alb_id) %>% 
-  mutate(fav_album_other_song = factor(ifelse(any(fav_album == "Already favorite"), min(timestamp), 9999999999) <= timestamp, 
-                                       levels = c(TRUE, FALSE), 
-                                       labels = c("Favorite", "Not favorite"))) %>% 
-  ungroup()
+                                          "To become favorite")))) #%>% 
+  # group_by(user_id, alb_id) %>% 
+  # mutate(fav_album_other_song = factor(ifelse(any(fav_album == "Already favorite"), min(timestamp), 9999999999) <= timestamp, 
+  #                                      levels = c(TRUE, FALSE), 
+  #                                      labels = c("Favorite", "Not favorite"))) %>% 
+  # ungroup()
 
 context_cat_dic <- c( "tops_album" = "top",
                       "tops_playlist" = "top",
@@ -332,7 +336,8 @@ context_cat_dic <- c( "tops_album" = "top",
                       "search_page" = "search",
                       "album_page" = "ND",
                       "track_page" = "ND",
-                      "playlist_page" = "playlist_page",
+                      "playlist_page_guidage_editorial" = "playlist_page_guidage_editorial",
+                      "playlist_page_personal_playlist" = "playlist_page_personal_playlist",
                       "unknown" = "unknown",
                       "player_default_playlist" = "player_defaut",
                       "selection_album" = "experts_editor",
@@ -347,14 +352,44 @@ context_cat_dic <- c( "tops_album" = "top",
 #                                           "favorite",
 #                                           context_name))
 
-st <- st %>% mutate(context_name = ifelse((fav_song == "Already favorite" | fav_artist == "Already favorite" | fav_artist_other_song == "Already favorite" | fav_album == "Already favorite" | fav_album_other_song  == "Already favorite") &
+st <- st %>% mutate(context_name = ifelse((fav_song == "Already favorite" | fav_artist == "Already favorite" | fav_album == "Already favorite") &
                                             context_name %in% c("search_page", "album_page", "track_page", "unknown"),
                                           "favorite",
                                           context_name))
 
 st <- select(st, -starts_with("timestamp_fav"), -starts_with("fav"))
 gc()
-st$context_cat <- factor(context_cat_dic[st$context_name])
+
+# on ajoute un export intermédiaire pour pouvoir retraiter les données
+# pour le diagnostic des playlists
+# save(st, file = here("data", "streams_for_playlist.RData"))
+
+## Traitement des playlists
+## discuté dans document 00_Playlists.Rmd
+
+load(here::here("data", "playlists.RData"))
+pl <- filter(st, context_name == "playlist_page") %>% 
+  mutate(id = as.numeric(context_id)) %>% 
+  group_by(id) %>% 
+  summarize(n_listen = n(),
+            n_users = n_distinct(user_id)) %>% 
+  right_join(pl, by = c("id"))
+
+pl <- mutate(pl, 
+       recl = case_when(
+         fans >= 30 ~ "playlist_page_guidage_editorial",
+         fans == 0 & n_users == 1 ~ "playlist_page_personal_playlist",
+         TRUE ~ "unknown"),
+       id = as.character(id)) %>% 
+  select(id, recl)
+
+st <- left_join(st, pl, by = c(context_id = "id"))
+st <- mutate(st, context_name = ifelse(context_name == "playlist_page" & !is.na(recl), recl, context_name))
+
+st <- mutate(st, context_cat = factor(context_cat_dic[context_name]))
+st <- select(st, -recl)
+
+rm(pl)
 
 ## Temporalité de l'écoute
 st <- mutate(st,
@@ -366,6 +401,8 @@ st <- mutate(st,
 ## Genres
 st <- left_join(st, select(genres, genre = name, alb_id), by = "alb_id")
 so <- left_join(so, select(genres, genre = name, alb_id), by = "alb_id")
+
+rm(genres)
 
 ### Genre classification by legitimacy level
 omni_dic <- c(
@@ -403,7 +440,7 @@ st <- mutate(st, legit = omni_dic[genre] %>% factor(levels = c("Lowbrow", "Middl
 ### Playlist autres/institutionnelles => guidage
 st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
                                NA,
-                               ifelse(context_cat %in% c("stock", "search", "artist_disco", "artist_top") | is.na(context_cat), # que faire de artist_top
+                               ifelse(context_cat %in% c("stock", "search", "artist_disco", "artist_top", "playlist_page_personal_playlist") | is.na(context_cat), # que faire de artist_top
                                       "Non guidée",
                                       "Guidée")) %>% 
                factor(),
@@ -411,7 +448,7 @@ st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
                                 NA,
                                 ifelse(guid == "Non guidée", 
                                        "Non guidée",
-                                       ifelse(context_cat %in% c("experts_editor", "explore_release", "social", "player_defaut", "top", "feed_playlist", "feed_track", "feed_album"), 
+                                       ifelse(context_cat %in% c("experts_editor", "explore_release", "social", "player_defaut", "top", "feed_playlist", "feed_track", "feed_album", "playlist_page_guidage_editorial"), 
                                               "Guidage", 
                                               "Flux"))) %>% 
                factor()) 
@@ -432,14 +469,14 @@ us <- group_by(st, user_id) %>%
             passifs = cut(fq, breaks = c(-.1, .00001, 0.8, 1.1), labels = c("Usagers exclusivement actifs", "Usagers mixtes", "Usagers principalement passifs")),
             nb_tracks = n_distinct(sng_id),
             nb_artists = n_distinct(art_id), 
-            volume_ecoute = sum(length, na.rm = TRUE), 
-            freq_mobile = sum(app_type == "mobile", na.rm = TRUE)/n(),
-            freq_desktop = sum(app_type == "desktop", na.rm = TRUE)/n(),
-            freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / n(),
+#           volume_ecoute = sum(length, na.rm = TRUE), 
+            freq_mobile = sum(app_type == "mobile", na.rm = TRUE) / nb_ecoutes,
+            freq_desktop = sum(app_type == "desktop", na.rm = TRUE) / nb_ecoutes,
+            freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / nb_ecoutes,
             nb_dispositifs = n_distinct(context_cat), 
-            freq_star_sng = sum(sng_pop == "Star", na.rm = TRUE) / n(),
-            freq_star_art = sum(art_pop == "Star", na.rm = TRUE) / n(),
-            freq_longtail_art = sum(art_pop == "Long tail", na.rm = TRUE) / n(),
+            freq_star_sng = sum(sng_pop == "Star", na.rm = TRUE) / nb_ecoutes,
+            freq_star_art = sum(art_pop == "Star", na.rm = TRUE) / nb_ecoutes,
+            freq_longtail_art = sum(art_pop == "Long tail", na.rm = TRUE) / nb_ecoutes,
             freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
   right_join(us, by = "user_id")
 us$passifs[us$nb_ecoutes < 100] <- NA
@@ -585,21 +622,24 @@ us <- mutate(us,
 
 
 ###### Selection  ######
-source("scripts/filter_users.R")
+source(here("import", "filter_users.R"))
 
 ## Songs and artists
-ar <- group_by(st, art_id) %>% 
-  summarise(n_listen = n(),
-            n_users = n_distinct(user_id),
-            freq_guid = sum(guid == "Guidée", na.rm=TRUE) / sum(!is.na(guid))) %>% 
-  right_join(ar, by = "art_id")
+# ar <- group_by(st, art_id) %>% 
+#   summarise(n_listen = n(),
+#             n_users = n_distinct(user_id),
+#             freq_guid = sum(guid == "Guidée", na.rm=TRUE) / sum(!is.na(guid))) %>% 
+#   right_join(ar, by = "art_id")
+# 
+# al <- group_by(st, alb_id) %>% 
+#   summarise(n_listen = n(),
+#             n_users = n_distinct(user_id),
+#             freq_guid = sum(guid == "Guidée", na.rm=TRUE) / sum(!is.na(guid)))
 
-al <- group_by(st, alb_id) %>% 
-  summarise(n_listen = n(),
-            n_users = n_distinct(user_id),
-            freq_guid = sum(guid == "Guidée", na.rm=TRUE) / sum(!is.na(guid)))
 
 save(fs, fal, far, file = "data/favorites.RData")
 save(us, file = "data/french_users.RData")
-save(so, ar, al, file = "data/songs_artists.RData")
+save(so, 
+     #ar, al, 
+     file = "data/songs_artists.RData")
 save(st, file = "data/streams.RData")
