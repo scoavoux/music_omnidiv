@@ -1,0 +1,186 @@
+---
+title: "Playlists"
+author: "Samuel Coavoux"
+date: "24/02/2020"
+output: html_document
+---
+
+Précaution de lecture: étant données les distributions, la plupart des graphiques présentent des échelles logarithmiques. Attention à bien lire les axes, qui ne sont pas linéaires, ainsi que les labels des axes, qui indiquent que l'on a souvent du ajouter 1 à la variable représentée parce que log(0) n'est pas défini.
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE,
+               error = FALSE,
+               message = FALSE,
+               warning = FALSE)
+```
+
+```{r pacakges}
+source(here::here("scripts", "common_packages.R"))
+```
+
+```{r}
+load(here("data", "playlists.RData"))
+load(here("data", "streams_for_playlist.RData"))
+```
+
+```{r}
+pl <- filter(st, context_cat == "playlist_page") %>% 
+  mutate(id = as.numeric(context_id)) %>% 
+  group_by(id) %>% 
+  summarize(n_listen = n(),
+            n_users = n_distinct(user_id)) %>% 
+  right_join(pl, by = c("id"))
+```
+
+
+Document d'analyse des informations sur les playlists scrapés le 6 décembre 2019.
+
+L'objectif est de classifier le plus grand nombre d'écoute en dirigé/non-dirigé en vérifiant si la playlist est personnelle ou si elle est publique.
+
+Il y a `r nrow(pl)` playlists uniques recensées dans la base.
+
+```{r}
+# Fonction de diagnostic
+pl <- mutate(pl, recl = NA_character_)
+dg <- function(x = pl){
+  tibble(indic = c("Tx brut", "Tx net", "Couverture_brut", "Couverture_net"), 
+         valeur = c(sum(!is.na(x$recl)) / nrow(x),
+                    sum(!is.na(x$recl) & x$recl != "unknown") / nrow(x),
+                    sum(x$n_listen[!is.na(x$recl)]) / sum(x$n_listen),
+                    sum(x$n_listen[!is.na(x$recl)  & x$recl != "unknown"]) / sum(x$n_listen)
+         )) %>% 
+    kable(caption = "Taux de reclassement des playlists (brut = incluant celles que l'on doit abandonner ; doit viser 100% ; net = excluant celles-ci = celles dont on peut récupérer qqch) ; la couverture compte le nombre d'écoute plutôt que le nombre de playlists")
+}
+dg(pl)
+```
+
+# Diagnostic
+
+```{r}
+skimr::skim(pl)
+```
+
+# Erreurs
+
+On pourrait penser que toutes les playlists pour lesquelles le scraping renvoie un code d'erreur "200 -- authentification" qui signifie qu'il s'agit d'une playlist privée à laquelle on ne peut accéder, sont des playlists personnelles. Cela concerne 1797 playlists, soit 5% de l'échantillon.
+
+```{r}
+tabyl(pl, error_code) %>% 
+  kable(caption = "Distribution des codes d'erreur (manquant si pas d'erreur)")
+```
+
+Cependant, toutes ne sont pas consommées par un auditeur unique... Au contraire, le nombre d'auditeurs uniques **dans notre échantillon** de ces playlists augmente plus vite que pour les autres playlists... Il me paraît difficile de l'expliquer.
+
+```{r}
+ggplot(pl, aes(fill = error_code, x = n_users)) +
+  geom_histogram() +
+  scale_y_log10() +
+  facet_wrap(~error_code)
+```
+
+```{r}
+group_by(pl, error_code) %>% 
+  summarize(mean_users   = mean(n_users),
+            median_users = median(n_users),
+            q3 = quantile(n_users, .75),
+            d9 = quantile(n_users, .9),
+            c95 = quantile(n_users, .95),
+            c99 = quantile(n_users, .99))
+```
+
+
+```{r}
+mutate(pl, auditeur_unique = n_users <= 1) %>% 
+  tabyl(error_code, auditeur_unique) %>% 
+  kable(caption = "A un auditeur unique dans l'échantillon, par type de code d'erreur (NA = pas d'erreur)")
+```
+
+Pour les playlists qui ont l'autre code d'erreur, elles ont a priori été effacées. Elles représentent 17% de l'échantillon. Il est difficile, ici, de statuer sur le fait qu'elles sont personnelles ou publiques.
+
+Clairement, pour les playlists sur lesquels nous n'avons aucune information parce qu'elles sont effacées, nous ne pouvons que considérer qu'elles sont irrécupérables. Pour les playlists privée, il est difficile de trancher quant à la position à tenir. On peut soit les considérer toutes comme des playlists personnelles, mais c'est un peu abusé étant donnée le grand nombre d'usagers ; soit considérer seulement celles qui ont un usager unique comme des playlists personnelles, mais nous n'avons qu'un échantillon, et le fait que seul un usager de l'échantillon écoute la playlist ne signifie pas que ce sera le cas dans la population entière. Enfin, on peut décider que toutes sont incertaines -- et l'on perd alors 25% de l'échantillon. Ici, il faut faire un choix entre qualité et quantité de données.
+
+# Nombre de "fans"
+
+Le nombre de fans des playlists est très inégalement réparti. Il y a deux modes, un à 0 fans, et un autre autour de 800.
+
+```{r, fig.cap = "Distribution du nombre de fan par playlist, échelle y logarithmique"}
+ggplot(pl, aes(fans + 1)) +
+  geom_histogram() +
+  scale_x_log10(breaks = 10^seq(0, 7))
+```
+
+On peut raisonnablement penser que les playlists très populaires ne sont pas des playlists personnelles et relèvent donc du guidage éditorial. Mais où tracer la limite ? Étant donné la répartition bimodale, il me paraît raisonnable de choisir un seuil dans le creux de la distribution (entre ~8 et ~100 d'après une lecture rapide du graph) et de considérer que toutes les playlists au-delà de ce seuil.
+
+Quand aux playlists à 0 fans, il est plus compliqué de trancher, car cela pourrait être une playlist personnelle ou une autre playlist très peu populaire. Elles sont pourtant fortement majoritaire (48% des playlists).
+
+```{r}
+cut(pl$fans, breaks = c(-1, 0, 100, 1000, Inf)) %>% 
+  tabyl() %>% 
+  kable(caption = "Distribution du nombre de fans")
+```
+
+Là encore, le nombre de fans est corrélé au nombre d'usager, mais ne l'est pas parfaitement, de sorte que quelques playlists à 0 fans ont plus d'un utilisateur unique dans la base. Cependant, c'est plus rare que pour les playlists privées...
+
+```{r}
+ggplot(pl, aes(fans + 1, n_users)) +
+  geom_count() +
+  scale_x_log10() +
+  scale_y_log10()
+```
+
+Dans ce cas, donc, il apparaît raisonnable de
+
++ considérer comme guidés tous les usages de playlists dont le nombre de fans dépasse un certain seuil (à définir autour de 10 et plus)
++ considérer comme stock/librairie personneles toutes les écoutes de playlists n'ayant aucun fan et utilisées par un seul usager.
+
+# Par nombre d'usager
+
+```{r}
+ggplot(pl, aes(n_users)) +
+  geom_histogram() +
+  scale_x_log10()
+```
+
+```{r}
+cut(pl$n_users, breaks = c(0, 1, 2, 3, 5, 10, 100, Inf)) %>% 
+  tabyl() %>% 
+  kable(caption = "Distribution du nombre d'usagers")
+```
+
+# Par nom
+
+On peut utiliser la variable creator_name pour rechercher des patterns renvoyant évidemment vers des éditeurs institutionnels (notamment les editors de Deezer, mais aussi les medias, maisons de disque, festival, etc.) et considérer que toutes leurs écoutes sont guidées.
+
+Cependant, ce travail est fastidieux et semble-t-il largement redondant avec les fans (la plupart des playlists institutionnelles ont un grand nombre de fans => sont prises dans le filet décrit précédemment)
+
+```{r}
+filter(pl, str_detect(creator_name, "[eE]ditor")) %>% 
+  distinct(creator_name) %>% 
+  kable(caption = "Nom contenant editor")
+```
+
+```{r}
+filter(pl, str_detect(creator_name, "[pP]artner")) %>% 
+  distinct(creator_name) %>% 
+  kable(caption = "Nom contenant partner")
+```
+
+Inversement, extraire les noms d'usagers "grand public" à la "MrMusic42" est fastidieux et peu utile : certains peuvent produire des playlists qui seront écoutées par d'autres, donc les noms nous renseignent peu ici.
+
+# Choix du recodage
+
+Après examen, on part sur l'idée que 
+
++ si n_fans == 0 et n_users == 1 => playlist personnelle
++ si n_fans >= 30 => playlist éditoriale (sachant que faire varier le seuil ne modifie le résultat qu'à la marge: passe de 64.4% pour n >= 30 à 63.1% pour n >= 100)
+
+```{r, eval = FALSE}
+mutate(pl, 
+       recl = case_when(
+         fans >= 30 ~ "guidage_editorial",
+         fans == 0 & n_users == 1 ~ "pers_playlist",
+         TRUE ~ recl)) %>% 
+  dg()
+```
+
