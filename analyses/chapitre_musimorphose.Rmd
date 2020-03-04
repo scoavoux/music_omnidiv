@@ -23,7 +23,7 @@ library("lubridate")
 library(here)
 library(GGally)
 # Options
-theme_set(theme_bw())
+theme_set(theme_bw(base_size = 18))
 ```
 
 ```{r data}
@@ -78,6 +78,10 @@ freq(us$anciennete_cat, cum = TRUE, exclude = NA) %>%
 Fréquence moyenne d'utilisation du téléphone portable: `r mean(us$freq_mobile)` ;
 Fréquence moyenne d'utilisation du téléphone portable: `r mean(us$freq_desktop)` ;
 
+```{r}
+
+```
+
 
 ```{r tri_plat_type_abo}
 freq(us$offer_id) %>%  kable(caption = "Distribution des types d'offre employés")
@@ -91,18 +95,17 @@ freq(us$offer_id2) %>%  kable(caption = "Distribution des types d'offre employé
 # st$offer_id2[st$offer_id2 == "Premium+"] <- "Premium"
 # st$offer_id2 <- droplevels(st$offer_id2)
 
-select(us, offer_id2, freq_mobile, freq_desktop) %>% 
-  gather(support, value, -offer_id2) %>% 
-  group_by(offer_id2, support) %>% 
-  summarize(`Fréquence moyenne d'utilisation` = round(mean(value, na.rm=TRUE)*100, 0)) %>% 
+count(st, offer_id2, app_type) %>% 
+  group_by(offer_id2) %>% 
+  mutate(`Fréquence moyenne d'utilisation` = round(n / sum(n) * 100, 1)) %>% 
   kable(caption = "Fréquence moyenne d'utilisation des supports par type d'abonnement")
+
 ```
 
 ```{r offline_freq}
-filter(st, app_type %in% c("desktop", "mobile")) %>% 
-  count(offer_id2, app_type, online) %>% 
+count(st, offer_id2, app_type, online) %>% 
   group_by(offer_id2, app_type) %>% 
-  mutate(f = round(n / sum(n) *100)) %>% 
+  mutate(f = round(n / sum(n) *100, 1)) %>% 
   filter(online == "Hors-ligne") %>% 
   kable(caption = "Fréquence d'écoute hors-ligne par support et par offre")
 
@@ -114,15 +117,14 @@ Nombre d'écoutes enregistrées: `r nrow(st)`
 
 ```{r duree_ecoute}
 freq(st$length < st$duration - 5)
-
-x <- ifelse(st$length <= 30,
+st$arret <- ifelse(st$length <= 30,
             "Écoute de moins de 30 secondes",
             ifelse(st$length < st$duration - 10, 
                    "Écoute arrêtée avant la fin du morceau",
                    "Écoute jusqu'à la fin du morceau")) %>% 
   factor()
   
-freq(x) %>%
+freq(st$arret) %>%
   kable(caption = "Distribution de la durée de l'écoute", digits = 1)
 
 ```
@@ -218,7 +220,7 @@ group_by(st, user_id) %>%
 
 ```{r correlation_diversite}
 
-cor(select(us, nb_artists, nb_ecoutes, anciennete_days, freq_radio, div_disp, freq_mobile, freq_nouveaute, freq_star_art))
+cor(select(us, nb_artists, nb_ecoutes, anciennete_days, freq_radio, freq_mobile, freq_nouveaute, freq_star_art))
 cor(select(us, nb_artists, age), use = "complete")
 ```
 
@@ -312,9 +314,9 @@ freq(x$`Long tail`  > 0.5) %>% kable(caption = "Part d'usagers pour lesquels fre
 
 ```{r distribution_pop_artistes, fig.cap = "Distribution du nombre d'écoutes par popularité des artistes"}
 us$profil_ecoute <- cut(us$nb_ecoutes, breaks = c(0, quantile(us$nb_ecoutes, c(.25, .75, 1))),
-                        labels = c("Consommation musicale faible (n=954)",
-                                   "Consommation musicale moyenne (n=1906)",
-                                   "Consommation musicale élevée (n=954)"))
+                        labels = c("Consommation\nfaible (n=954)",
+                                   "Consommation\nmoyenne (n=1906)",
+                                   "Consommation\nélevée (n=954)"))
 
 x <- group_by(st, user_id, art_pop) %>% 
   summarize(n = n(),
@@ -328,7 +330,7 @@ x <- group_by(st, user_id, art_pop) %>%
   ungroup() %>% 
   gather(key, value, -art_pop, -profil_ecoute) %>% 
     mutate(art_pop = factor(art_pop, levels = rev(levels(art_pop))),
-         key = factor(key, levels = c("l", "n"), labels = c("Panier", "Fréquence moyenne d'écoute")))
+         key = factor(key, levels = c("l", "n"), labels = c("Panier", "Fréquence moyenne\nd'écoute")))
 
 ggplot(x, aes(x = key, y=value*100, fill= art_pop)) +
   geom_bar(stat="identity", position="dodge") +
@@ -343,6 +345,7 @@ ggplot(x, aes(x = key, y=value*100, fill= art_pop)) +
 # Les usages du guidage
 
 ## ecoutes autonomes et hétéronomes
+
 Auditeurs et écoutes sont très inégalement réparties entre les artistes, la plupart d'entre eux n'ayant quasiment 
 
 code | nom
@@ -468,3 +471,60 @@ group_by(stpf, context_cat, art_pop) %>%
   slice(1:5) %>% 
   kable(caption = "Distribution du nombre de réécoute par dispositif de première écoute / non_favori, seulement les 5 plus forte réécoutes moyennes")
 ```
+
+## Ecoutes arrêtées avant la fin
+
+```{r}
+filter(st, !is.na(arret), !is.na(guid)) %>% 
+  count(arret, guid) %>% 
+  group_by(guid) %>% 
+  mutate(n = round(n / sum(n) * 100, 1)) %>% 
+  spread(arret, n) %>% 
+  arrange(`Écoute jusqu'à la fin du morceau`) %>% 
+  kable(caption = "Écoutes jusqu'à la fin, par guidage")
+```
+
+
+```{r}
+filter(st, !is.na(arret), !is.na(type_guid)) %>% 
+  count(arret, type_guid) %>% 
+  group_by(type_guid) %>% 
+  mutate(n = round(n / sum(n) * 100, 1)) %>% 
+  spread(arret, n) %>% 
+  arrange(`Écoute jusqu'à la fin du morceau`) %>% 
+  kable(caption = "Écoutes jusqu'à la fin, par type de guidage")
+```
+
+
+```{r}
+filter(st, !is.na(arret), !is.na(context_cat)) %>% 
+  count(arret, context_cat) %>% 
+  group_by(context_cat) %>% 
+  mutate(n = round(n / sum(n) * 100, 1)) %>% 
+  spread(arret, n) %>% 
+  arrange(`Écoute jusqu'à la fin du morceau`) %>% 
+  kable(caption = "Écoutes jusqu'à la fin, par dispositif")
+```
+
+
+# Usages de la recommandation par genre
+
+```{r genre_x_freq_disp_barplot, fig.cap="Frequency of use of recommendation, by music genre"}
+count(st, genre, guid) %>%
+  filter(!is.na(guid)) %>%
+  group_by(genre) %>%
+  mutate(f = n / sum(n)) %>%
+  ungroup() %>%
+  filter(guid == "Guidée", !is.na(genre)) %>%
+  arrange(f) %>%
+  mutate(genre = factor(genre, levels = genre)) %>%
+  ggplot(aes(genre, f)) +
+    geom_col() +
+    labs(y = "Fréquence d'usage des recommandations",
+         x = "Genres") +
+    coord_flip() +
+    ylim(0, 0.4)
+```
+
+# Annexes
+
