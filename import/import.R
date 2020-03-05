@@ -455,31 +455,90 @@ st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
 
 ###### Appareiller streams et users######
 
+x <- count(st, user_id, guid, type_guid)
+
+us <- x %>% 
+  group_by(user_id) %>% 
+  summarise(nb_ecoutes = sum(n)) %>% 
+  right_join(us)
+
+x <- filter(x, !is.na(guid))
+
+us <- x %>% 
+  group_by(user_id) %>% 
+  summarise(nb_ecoutes_qual = sum(n)) %>% 
+  right_join(us)
+
+us <- group_by(x, user_id, guid) %>% 
+  summarise(n = sum(n)) %>% 
+  ungroup() %>% 
+  mutate(guid = fct_recode(guid, nb_guid = "Guidée", nb_stock = "Non guidée")) %>% 
+  spread(guid, n, fill = 0) %>% 
+  right_join(us)
+
+us <- filter(x, type_guid != "Non guidée") %>% 
+  group_by(user_id, type_guid) %>% 
+  summarise(n = sum(n)) %>% 
+  ungroup() %>% 
+  mutate(type_guid = fct_recode(type_guid, nb_flux = "Flux", nb_edit = "Guidage")) %>% 
+  spread(type_guid, n, fill = 0) %>% 
+  right_join(us)
+
+us <- mutate(us, 
+             fq = nb_guid / nb_ecoutes_qual,
+             fa = nb_flux / nb_ecoutes_qual,
+             fe = nb_edit / nb_ecoutes_qual,
+             fg = nb_edit / nb_flux,
+             passifs = cut(fq, breaks = c(-.1, .00001, 0.8, 1.1), labels = c("Usagers exclusivement actifs", "Usagers mixtes", "Usagers principalement passifs")))
+
 us <- group_by(st, user_id) %>% 
-  summarise(nb_ecoutes = n(),
-            nb_guid = sum(guid == "Guidée", na.rm=TRUE),
-            nb_stock = sum(guid == "Non guidée", na.rm=TRUE),
-            nb_edit = sum(type_guid == "Guidage", na.rm=TRUE),
-            nb_flux = sum(type_guid == "Flux", na.rm=TRUE),
-            fq = nb_guid / sum(!is.na(guid)),
-            fa = nb_flux / sum(!is.na(type_guid)),
-            fe = nb_edit / sum(!is.na(type_guid)),
-            fg = sum(type_guid == "Guidage", na.rm=TRUE) / sum(type_guid != "Non guidée" & !is.na(type_guid)),
-            ## Passivité: ajouter une modalité quand aucune écoute passive
-            passifs = cut(fq, breaks = c(-.1, .00001, 0.8, 1.1), labels = c("Usagers exclusivement actifs", "Usagers mixtes", "Usagers principalement passifs")),
-            nb_tracks = n_distinct(sng_id),
+  summarise(nb_tracks = n_distinct(sng_id),
             nb_artists = n_distinct(art_id), 
-#           volume_ecoute = sum(length, na.rm = TRUE), 
-            freq_mobile = sum(app_type == "mobile", na.rm = TRUE) / nb_ecoutes,
-            freq_desktop = sum(app_type == "desktop", na.rm = TRUE) / nb_ecoutes,
-            freq_radio = sum(context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio"), na.rm = TRUE) / nb_ecoutes,
-            nb_dispositifs = n_distinct(context_cat), 
-            freq_star_sng = sum(sng_pop == "Star", na.rm = TRUE) / nb_ecoutes,
-            freq_star_art = sum(art_pop == "Star", na.rm = TRUE) / nb_ecoutes,
-            freq_longtail_art = sum(art_pop == "Long tail", na.rm = TRUE) / nb_ecoutes,
-            freq_nouveaute = sum(nouveaute == "Nouveauté", na.rm = TRUE) / sum(!is.na(nouveaute))) %>% 
-  right_join(us, by = "user_id")
-us$passifs[us$nb_ecoutes < 100] <- NA
+            volume_ecoute = sum(length, na.rm = TRUE)) %>% 
+  right_join(us)
+
+us <- count(st, user_id, app_type) %>% 
+  filter(app_type %in% c("desktop", "mobile")) %>% 
+  mutate(app_type = paste0("freq_", app_type)) %>% 
+  spread(app_type, n, fill = 0) %>% 
+  right_join(us)
+
+
+x <- count(st, user_id, context_cat) %>% 
+  group_by(user_id)
+
+us <- x %>% 
+  summarize(nb_dispositifs = n()) %>% 
+  right_join(us)
+
+us <- filter(x, context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio")) %>% 
+  summarize(freq_radio = sum()) %>% 
+  right_join(us)
+
+us <- filter(st, sng_pop == "Star") %>% 
+  count(user_id, sng_pop) %>% 
+  ungroup() %>% 
+  select(user_id, freq_star_sng = "n") %>% 
+  right_join(us)
+
+us <- filter(st, art_pop %in% c("Star", "Long tail")) %>% 
+  count(user_id, art_pop) %>% 
+  ungroup() %>% 
+  mutate(art_pop = fct_recode(art_pop, freq_star_art = "Star", freq_longtail_art = "Long tail")) %>% 
+  spread(art_pop, n, fill = 0) %>% 
+  right_join(us)
+
+us <- count(st, user_id, nouveaute) %>% 
+  filter(!is.na(nouveaute)) %>% 
+  group_by(user_id) %>% 
+  mutate(freq_nouveaute = n / sum(n)) %>% 
+  filter(nouveaute == "Nouveauté") %>% 
+  select(user_id, freq_nouveaute) %>% 
+  right_join(us)
+  
+us <- mutate_at(us, vars(freq_desktop, freq_mobile, freq_radio, freq_star_sng, freq_star_art, freq_longtail_art), ~ifelse(is.na(.), 0, .)/nb_ecoutes)
+
+us <- mutate(us, passifs = ifelse(nb_ecoutes < 100, NA, passifs))
 
 
 ## Diversité des genres écoutés
@@ -604,11 +663,11 @@ us <- mutate_at(us, vars(ends_with("_stock")), funs(ifelse(nb_stock < 100, NA, .
 #   right_join(us)
 # 
 # ## Diversité des dispositifs employés
-# us <- count(st, user_id, context_cat) %>% 
-#   group_by(user_id) %>% 
-#   mutate(f = n / sum(n)) %>% 
-#   summarize(div_disp = prod(f^f)^-1) %>% 
-#   right_join(us)
+us <- count(st, user_id, context_cat) %>%
+  group_by(user_id) %>%
+  mutate(f = n / sum(n)) %>%
+  summarize(div_disp = prod(f^f)^-1) %>%
+  right_join(us)
 
 ## favoris
 us <- mutate(us, 
@@ -624,22 +683,33 @@ us <- mutate(us,
 ###### Selection  ######
 source(here("import", "filter_users.R"))
 
-## Songs and artists
-# ar <- group_by(st, art_id) %>% 
-#   summarise(n_listen = n(),
-#             n_users = n_distinct(user_id),
-#             freq_guid = sum(guid == "Guidée", na.rm=TRUE) / sum(!is.na(guid))) %>% 
-#   right_join(ar, by = "art_id")
-# 
-# al <- group_by(st, alb_id) %>% 
-#   summarise(n_listen = n(),
-#             n_users = n_distinct(user_id),
-#             freq_guid = sum(guid == "Guidée", na.rm=TRUE) / sum(!is.na(guid)))
+# Songs and artists
+
+ar <- filter(st, !is.na(guid)) %>% 
+  count(art_id, guid) %>% 
+  mutate(freq_guid = n / sum(n)) %>% 
+  filter(guid == "Guidée") %>% 
+  select(art_id, freq_guid) %>% 
+  right_join(ar)
+
+ar <- group_by(st, art_id) %>%
+  summarise(n_listen = n(),
+            n_users = n_distinct(user_id)) %>%
+  right_join(ar)
+
+al <- filter(st, !is.na(guid)) %>% 
+  count(alb_id, guid) %>% 
+  mutate(freq_guid = n / sum(n)) %>% 
+  filter(guid == "Guidée") %>% 
+  select(alb_id, freq_guid)
+
+al <- group_by(st, alb_id) %>%
+  summarise(n_listen = n(),
+            n_users = n_distinct(user_id)) %>% 
+  right_join(al)
 
 
 save(fs, fal, far, file = "data/favorites.RData")
 save(us, file = "data/french_users.RData")
-save(so, 
-     #ar, al, 
-     file = "data/songs_artists.RData")
+save(so, ar, al, file = "data/songs_artists.RData")
 save(st, file = "data/streams.RData")
