@@ -44,6 +44,15 @@ theme_set(theme_bw())
 load(here("data", "streams.RData"))
 load(here("data", "french_users.RData"))
 load(here("data", "songs_artists.RData"))
+us <- count(st, user_id, context_cat) %>%
+  group_by(user_id) %>%
+  mutate(f = n / sum(n)) %>%
+  summarize(div_disp = prod(f^f)^-1) %>%
+  right_join(us)
+
+
+# temp
+us <- filter(us, nb_ecoutes > 260)
 ```
 
 On s'intéresse dans ce document aux genres musicaux.
