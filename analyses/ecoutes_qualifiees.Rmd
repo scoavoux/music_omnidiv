@@ -447,13 +447,6 @@ filter(us, !is.na(passifs)) %>%
   geom_boxplot(notch = TRUE)
 ```
 
-```{r passifs_div_sng_boxplot}
-filter(us, !is.na(passifs)) %>% 
-  ggplot(aes(passifs, div_sng)) + 
-  geom_boxplot(notch = TRUE)
-```
-
-
 # Rythme du guidage
 
 La fréquence d'utilisation d'écoutes guidées varie avec l'heure de la journée. elle est la plus faible durant la nuit, la plus forte durant la journée, à 10h et 15h, et décroît légérement entre 10h et 15h, puis entre 15h et 20h.

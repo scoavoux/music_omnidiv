@@ -3,6 +3,7 @@ title: "Data analysis for the paper on omnivorism"
 author: "Samuel Coavoux"
 bibliography: /home/vvxf6766/PortKnox/bib/mainlibrary.bib
 output: 
+  tufte::tufte_html: default
   pdf_document: 
     toc: yes
   html_document: 
@@ -59,7 +60,6 @@ library(stargazer)
 library(gridExtra)
 library(TraMineR)
 library(triversity)
-library(ggtern)
 loadRData <- function(fileName){
 #loads an RData file, and returns it
     load(fileName)
@@ -88,7 +88,7 @@ load(here("data", "triversity_objects.RData"))
 #   summarise(fq = sum(guid == "Guidée")/n()) %>% 
 #   left_join(select(us, -fq))
 
-source(here("scripts", "in_english.R"))
+source(here("recodages", "in_english.R"))
 
 ```
 
@@ -1000,7 +1000,7 @@ us$omni_clust <- factor(us$omni_clust) #temporary
 # plot(1:15, wss, type="b", xlab="Number of Clusters",
 #   ylab="Within groups sum of squares")  # 
 
-ggtern(us, aes(Highbrow, Lowbrow, Middlebrow, color=omni_clust)) + 
+ggtern::ggtern(us, aes(Highbrow, Lowbrow, Middlebrow, color=omni_clust)) + 
   geom_point() +
   labs(color = "Omnivorism\nclusters")
 ```

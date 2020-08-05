@@ -78,11 +78,6 @@ freq(us$anciennete_cat, cum = TRUE, exclude = NA) %>%
 Fréquence moyenne d'utilisation du téléphone portable: `r mean(us$freq_mobile)` ;
 Fréquence moyenne d'utilisation du téléphone portable: `r mean(us$freq_desktop)` ;
 
-```{r}
-
-```
-
-
 ```{r tri_plat_type_abo}
 freq(us$offer_id) %>%  kable(caption = "Distribution des types d'offre employés")
 ```
@@ -154,8 +149,8 @@ filter(st, sng_id %in% b$sng_id) %>%
 
 ```
 
- 
-```{r}
+L'analyse suivante disparaît provisoirement parce que la base ar n'est plus exportée par le script import.R
+```{r, eval = FALSE}
 so[so$sng_id %in% b$sng_id,] %>% 
   left_join(ar, by = "art_id") %>% 
   select(sng_title, art_name) %>% 
@@ -417,13 +412,14 @@ stpf <- group_by(st, user_id, art_id) %>%
   mutate(n_reecoute = n()) %>% 
   arrange(timestamp) %>% 
   slice(1) %>% 
-  filter(!(context_cat %in% c("stock", "unknown", "ND")), !is.na(context_cat))
+  filter(!(context_cat %in% c("stock", "unknown", "ND")), !is.na(context_cat)) %>% 
+  ungroup()
 ```
 
 Ces premières écoutes se font environ deux fois plus souvent via les playlists
 
 ```{r distribution_dispositif_premiere_ecoute}
-freq(stpf$context_cat, sort = "dec") %>% 
+tabyl(stpf, context_cat, sort = "dec") %>% 
   kable(caption = "Distribution des dispositifs pour les premières écoutes (première écoute d'un artiste non favori au moment de l'écoute)")
 ```
 
