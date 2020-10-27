@@ -431,13 +431,6 @@ omni_dic <- c(
 
 st <- mutate(st, legit = omni_dic[genre] %>% factor(levels = c("Lowbrow", "Middlebrow", "Highbrow"))) #Unclassified
 
-### Il reste un gros problème à résoudre par du scraping.
-### Pour le moment, les playlists dominent, mais on ne sait pas
-### si ce sont des playlists personnelles ou du guidage
-### => il faut les scrapper ID par ID.
-### Puis revoir le code ci-dessous
-### Playlist personnelle => stock
-### Playlist autres/institutionnelles => guidage
 st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
                                NA,
                                ifelse(context_cat %in% c("stock", "search", "artist_disco", "artist_top", "playlist_page_personal_playlist") | is.na(context_cat), # que faire de artist_top
@@ -537,9 +530,6 @@ us <- count(st, user_id, nouveaute) %>%
   right_join(us)
   
 us <- mutate_at(us, vars(freq_desktop, freq_mobile, freq_radio, freq_star_sng, freq_star_art, freq_longtail_art), ~ifelse(is.na(.), 0, .)/nb_ecoutes)
-
-us <- mutate(us, passifs = ifelse(nb_ecoutes < 100, NA, passifs))
-
 
 ## Diversité des genres écoutés
 
@@ -652,8 +642,8 @@ us <- filter(st, !is.na(type_guid), type_guid != "Non guidée", !is.na(legit)) %
 
 
 ## Specific diversity not defined where stock/rec too low:
-us <- mutate_at(us, vars(ends_with("_stock")), funs(ifelse(nb_stock < 100, NA, .))) %>% 
-  mutate_at(vars(ends_with("_rev")), funs(ifelse(nb_guid < 100, NA, .)))
+# us <- mutate_at(us, vars(ends_with("_stock")), funs(ifelse(nb_stock < 100, NA, .))) %>% 
+#   mutate_at(vars(ends_with("_rev")), funs(ifelse(nb_guid < 100, NA, .)))
   
 # ## Diversité des chansons écoutés
 # us <- count(st, user_id, sng_id) %>% 

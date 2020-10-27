@@ -25,7 +25,7 @@ if(isTRUE(getOption('knitr.in.progress'))){
 
 ```{r packages}
 library(tidyverse)
-library(cowplot)
+#library(cowplot)
 library(broom)
 library(lubridate)
 library(here)
@@ -101,7 +101,7 @@ summary(us$div_genre) %>% tidy() %>%  kable(caption = "Distribution de la divers
 La variable n'est pas normalement distribuée du fait de la queue à gauche, mais le reste de la distribution ressemble à une loi normale, avec un pic autour de la moyenne.
 
 ```{r diversity_histogramme, fig.cap  = "Histogramme et graph qq de la diversité de genre"}
-plot_grid(ggplot(us, aes(div_genre)) +
+cowplot::plot_grid(ggplot(us, aes(div_genre)) +
                 geom_histogram(),
           ggplot(us, aes(sample = div_genre)) +
             geom_qq(),

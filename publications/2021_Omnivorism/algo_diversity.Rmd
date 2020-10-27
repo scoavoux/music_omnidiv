@@ -13,6 +13,8 @@ output:
     keep_md: yes
     number_sections: yes
     toc: yes
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -26,40 +28,18 @@ opts_chunk$set(message = FALSE,
                dpi = 1200)
 ```
 
-<!--
-todo next:
-
-OMNIVORISME INDEX: DIVERSITY OVER 3 CAT BASED ON GENRES.
-
-HIGHBROW: CLASSIQUE, JAZZ
-MIDDLEBROW: ROCK
-LOWBROW: CHANSON, POP, DANCE, RAP, METAL
-
-UNCLASSIFIED: SOUL, REGGAE, JEUNESSE, R&B, ELECTRO, COUNTRY, MUSICALS, BLUES, ALTERNATIVE
-
-Table des matières dans le RMD
-
-Diversity: quelques tris croisés dans la partie description de la diversité.
-
-Mesures de la diversité: plus précise, etc. ; dispersion de la diversité importante
-
-Autres analyses à faire:
-
-+ diversité par taux d'écoute de chaque genre au niveau individuel
-+ au niveau individuel, diversité dans les écoutes guidées vs. dans les écoutes non guidées.
-+ pondérer diversité par log(us$nb_ecoutes) ? (idem pour comparer au niveau individuel)
--->
-
 ```{r packages}
 library(tidyverse)
 library(lubridate)
 library(here)
 library(forcats)
-library(questionr)
+library(janitor)
 library(stargazer)
 library(gridExtra)
 library(TraMineR)
 library(triversity)
+library(lme4)
+library(effsize)
 loadRData <- function(fileName){
 #loads an RData file, and returns it
     load(fileName)
@@ -81,7 +61,7 @@ load(here("data", "triversity_objects.RData"))
 # st <- filter(st, !is.na(guid), type_guid != "Guidage")
 # sts <- filter(sts, !is.na(guid), type_guid != "Guidage")
 # 
-# ## ATTENTION IL FAUT REFAIRE LES BASSE POUR TRIVERSITY (pour calcul de diversité agrégée)
+# ## ATTENTION IL FAUT REFAIRE LES BASES POUR TRIVERSITY (pour calcul de diversité agrégée)
 # 
 # ## recalculer variable part de reco algo
 # us <- group_by(st, user_id) %>% 
@@ -99,7 +79,7 @@ streak_eval <- FALSE
 ```
 
 
-```{r data_streaks, eval=streak_eval}
+```{r data_streaks, eval = streak_eval}
 ## Streak data
 sts <- loadRData(here("data", "streams_streak.RData"))
 
@@ -113,7 +93,7 @@ if(isTRUE(getOption('knitr.in.progress'))) {
     output_type <- "text"
 }
 
-theme_set(theme_bw(base_size = 15))
+theme_set(theme_bw(base_size = 12))
 
 knit_hooks$set(inline = function(x) {
   prettyNum(x, big.mark=" ")
@@ -125,7 +105,7 @@ options(scipen = 99)
 # Data description
 
 ```{r}
-freq(us$gender) %>% 
+tabyl(us, gender) %>% 
   kable(caption="Distribution of gender")
 ```
 
@@ -245,7 +225,7 @@ data_frame(Metric = c("# of listen",
 It shall be noted that we did not have access to the full catalog of the music service, but only the tracks listened to by our sample. The service does not release the number of different artists available, but claims to host 35M tracks, of which less than 1M are listened by our sample. This means that there probably are several thousand artists present in the catalog but not used by people from our sample (which should appear in the longer tail of the previous figure).
 
 ```{r table_description_catalog}
-data_frame(
+tibble(
   Metric = c("# of distinct artists", "# of distinct tracks"), 
   Sample = c(nrow(distinct(st, art_id)),
              nrow(distinct(st, sng_id))),
@@ -411,17 +391,17 @@ Yet, we find that collective guided diversity is more than 1.3 times higher than
 At the aggregate level, there is a relation between recommendation and diversity.
 
 ```{r table_distribution_stock_reco_play}
-freq(st$guid) %>% 
+tabyl(st, guid) %>% 
   kable(caption = "Distribution of guided/unguided plays")
 ```
 
 ```{r table_distribution_stock_reco_algo_ed_play}
-freq(st$type_guid) %>% 
+tabyl(st, type_guid) %>% 
   kable(caption = "Distribution of recommended plays")
 ```
 
 
-```{r aggregate_artist_diversity}
+```{r aggregate_artist_diversity, eval=FALSE}
 data.frame(Type = c("Collective", "Mean", "N"),
            Guided = c(get_diversity_from_path(mp_guid, type = "collective", path = c(1, 2), order = 1),
                       get_diversity_from_path(mp_guid, type = "mean", path = c(1, 2), order = 1),
@@ -434,7 +414,7 @@ data.frame(Type = c("Collective", "Mean", "N"),
 ```
 
 
-```{r aggregate_genre_diversity}
+```{r aggregate_genre_diversity, eval=FALSE}
 data.frame(Type = c("Collective", "Mean", "N"),
            Guided = c(get_diversity_from_path(mp_guid, type = "collective", path = c(1, 2, 3), order = 1),
                       get_diversity_from_path(mp_guid, type = "mean", path = c(1, 2, 3), order = 1),
@@ -492,11 +472,19 @@ filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>%
   t.test(div_artists~passifs, data=.)
 
 filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
+  ggplot(aes(log(div_artists), fill = passifs)) +
+    geom_density(alpha = .5)
+
+filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
   mutate(passifs=droplevels(passifs)) %>% 
   cohen.d(div_artists~passifs, data=.)
 
 filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
   t.test(div_genre~passifs, data=.)
+
+filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
+  ggplot(aes(div_genre, fill = passifs)) +
+    geom_density(alpha = .5)
 
 filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>% 
   mutate(passifs=droplevels(passifs)) %>% 
@@ -508,55 +496,74 @@ filter(us, !is.na(passifs), passifs != "Mixed (freq. algo. $\\approx$ 0)") %>%
 
 
 ```{r intra_individual_guid_diversity_boxplot, fig.cap = "Intra individual variations in artist diversity, by feature"}
-## Changer pour intégrer directement ces variables.
-df <- filter(st, !is.na(guid)) %>% 
-  count(user_id, guid, art_id) %>% 
-  group_by(user_id, guid) %>% 
-  mutate(f = n/sum(n)) %>% 
-  summarise(N = sum(n),
-            div_art = prod(f^f)^-1) %>% 
-  filter(N>100)
+select(us, div_artists_stock, div_artists_rec) %>% 
+  pivot_longer(everything()) %>% 
+  ggplot(aes(name, log(value))) +
+    geom_boxplot(notch=TRUE) +
+    labs(x = "Type of play", y = "Log artist diversity")
 
-
-## Uniquement ceux qui ont employé les trois dispositifs
-ggplot(group_by(df, user_id) %>% filter(n() == 2), aes(guid, log(div_art))) +
-  geom_boxplot(notch=TRUE) +
-  labs(x = "Type of play", y = "Log artist diversity")
 
 ```
 
 Only `r group_by(df, user_id) %>% filter(n() == 2) %>% nrow()` people.
 
 ```{r intra_individual_guid_diversity_violinplot, fig.cap = "Intra individual variations in artist diversity, by feature"}
-ggplot(group_by(df, user_id) %>% filter(n() == 2), aes(guid, log(div_art))) +
+select(us, div_artists_stock, div_artists_rec) %>% 
+  pivot_longer(everything()) %>% 
+  ggplot(aes(name, log(value))) +
   geom_violin(draw_quantiles = c(.25, .5, .75)) +
   labs(x = "Type of play", y = "Log artist diversity")
 ```
 
+```{r}
+mutate(us, diff = div_artists_rec - div_artists_stock) %>%
+  ggplot(aes(log(diff))) +
+    geom_histogram() +
+    labs(x = "Div artist reco - div artist stock")
+```
+
+```{r}
+mutate(us, diff = div_artists_rec / div_artists_stock) %>%
+  ggplot(aes(log(diff))) +
+    geom_histogram() +
+    labs(x = "Div artist reco / div artist stock")
+```
+
 
 ```{r intra_individual_guid_genre_diversity_boxplot, fig.cap = "Intra individual variations in genre diversity, by feature"}
-df <- filter(st, !is.na(guid)) %>% 
-  count(user_id, guid, genre) %>% 
-  group_by(user_id, guid) %>% 
-  mutate(f = n/sum(n)) %>% 
-  summarise(N = sum(n),
-            div_genre = prod(f^f)^-1) %>% 
-  filter(N>100)
-
-
-## Uniquement ceux qui ont employé les trois dispositifs
-ggplot(group_by(df, user_id) %>% filter(n() == 2), aes(guid, div_genre)) +
-  geom_boxplot(notch=TRUE) +
-  labs(x = "Type of play", y = "Genre diversity")
-
-
+select(us, div_genre_stock, div_genre_rec) %>% 
+  pivot_longer(everything()) %>% 
+  ggplot(aes(name, value)) +
+    geom_boxplot(notch=TRUE) +
+    labs(x = "Type of play", y = "Genre diversity")
 ```
 
 ```{r intra_individual_guid_genre_diversity_violinplot, fig.cap = "Intra individual variations in genre diversity, by feature"}
-ggplot(group_by(df, user_id) %>% filter(n() == 2), aes(guid, div_genre)) +
-  geom_violin(draw_quantiles = c(.25, .5, .75))
+select(us, div_genre_stock, div_genre_rec) %>% 
+  pivot_longer(everything()) %>% 
+  ggplot(aes(name, value)) +
+    geom_violin(draw_quantiles = c(.25, .5, .75)) +
+    labs(x = "Type of play", y = "Genre diversity")
+
 
 ```
+
+```{r}
+mutate(us, diff = div_genre_rec - div_genre_stock) %>%
+  ggplot(aes(diff)) +
+    geom_histogram() +
+    labs(x = "Div genre reco - div genre stock")
+```
+
+
+```{r}
+mutate(us, diff = div_genre_rec / div_genre_stock) %>%
+  ggplot(aes(diff)) +
+    geom_histogram() +
+    labs(x = "Div genre reco / div genre stock")
+
+```
+
 
 <!-- Attention aux problèmes de comparabilité: avec les seuils, tout le monde n'est pas inclut dans les trois graphes. -->
 
@@ -866,22 +873,51 @@ summary(us$div_genre) %>%
 ### Fixed-effect model
 
 ```{r}
-select(us, starts_with("div_artists_")) %>% 
-  gather(key, value) %>% 
-  filter(!is.na(value)) %>% 
-  mutate(value = log(value)) %>% 
-  lm(value ~ key, data=.) %>% 
-  stargazer(type = output_type)
+library(MuMIn)
+
+x <- select(us, user_id, div_artists_rec, div_artists_stock, nb_guid, nb_stock, fq)
+x <- pivot_longer(x, cols = starts_with("div_artists")) %>% 
+  mutate(nb = ifelse(name == "div_artist_rec", nb_guid, nb_stock)) %>% 
+  select(-nb_guid, -nb_stock) %>% 
+  group_by(user_id) %>% 
+  filter(!any(is.na(value)))
+
+fe_lm_artdiv <- lmer(value ~ log(nb) + (1 | user_id) + name, data = x)
+r.squaredGLMM(fe_lm)
+stargazer(fe_lm, type = output_type)
 ```
 
 ```{r}
-pairing <- filter(us, fq < 0.001)
+x <- select(us, user_id, div_genre_rec, div_genre_stock, nb_guid, nb_stock, fq)
+x <- pivot_longer(x, cols = starts_with("div_")) %>% 
+  mutate(nb = ifelse(name == "div_genre_rec", nb_guid, nb_stock)) %>% 
+  select(-nb_guid, -nb_stock) %>% 
+  group_by(user_id) %>% 
+  filter(!any(is.na(value)))
+
+fe_lm_genrediv <- lmer(value ~ log(nb) + (1 | user_id) + name, data = x)
+
+stargazer(fe_lm, type = output_type)
+```
+
+```{r}
+x <- select(us, user_id, div_omni_rec, div_omni_stock, nb_guid, nb_stock, fq)
+x <- pivot_longer(x, cols = starts_with("div_")) %>% 
+  mutate(nb = ifelse(name == "div_omni_rec", nb_guid, nb_stock)) %>% 
+  select(-nb_guid, -nb_stock) %>% 
+  group_by(user_id) %>% 
+  filter(!any(is.na(value)))
+
+fe_lm_omnidiv <- lmer(value ~ log(nb) + (1 | user_id) + name, data = x)
+
+stargazer(fe_lm, type = output_type)
 ```
 
 
 ## Algorithmic and editorial recommendations
 
 Question dela mesure de fa/fe: sur total du stock? ou total des écoutes?
+
 ```{r distribution_fa_fe_density_plot, fig.cap = "Distribution of frequency of algorithmic/editorial recommendations"}
 # fa et fe: freq algo et freq editorial
 df <- select(us, fa, fe, div_artists, div_genre, nb_ecoutes, passifs) %>% 
@@ -981,28 +1017,6 @@ mutate(us, div_artists = log(div_artists)) %>%
     geom_smooth(method="lm") +
     facet_wrap(~key, scales="free")
 
-```
-
-
-```{r omnivorim_cluster_initialization, fig.cap = "Omnivorism clusters"}
-
-set.seed(1979)
-us$omni_clust[!is.na(us$Lowbrow)] <- kmeans(select(us[!is.na(us$Lowbrow), ], Lowbrow:Highbrow), centers = 4)$clust
-# us$omni_clust <- factor(us$omni_clust, 
-#                          levels = c(3, 2, 4, 1),
-#                          labels = c("Lowbrow univore", "Omnivore", "Middlebrow univore", "Snob"))
-us$omni_clust <- factor(us$omni_clust) #temporary
-
-## Validation nombre de clusters
-# wss <- (nrow(us)-1)*sum(apply(select(us, Lowbrow:Highbrow),2,var))
-# for (i in 2:15) wss[i] <- sum(kmeans(select(us, Lowbrow:Highbrow),
-#    centers=i)$withinss)
-# plot(1:15, wss, type="b", xlab="Number of Clusters",
-#   ylab="Within groups sum of squares")  # 
-
-ggtern::ggtern(us, aes(Highbrow, Lowbrow, Middlebrow, color=omni_clust)) + 
-  geom_point() +
-  labs(color = "Omnivorism\nclusters")
 ```
 
 TODO
