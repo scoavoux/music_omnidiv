@@ -337,7 +337,6 @@ summary(us$nb_ecoutes) %>%
   kable(caption = "Summary stat of # of listen")
 ```
 
-
 We now measure diversity with the exponent of Shannon's entropy. Its theoretical maximum is the total number of artists in the base (114 182) and would be the score of a person who had listen to each artist the same number of times. The empirical maximum is of course much lower, at `r max(us$div_artists)`. We first plot the individual diversity of artists. Its distribution is highly skewed to the left: most users have a low diversity, while there is a long tail of high-diversity users. In the remaining of the paper, we will use the log of artist diversity ; we should therefore indicate that its empirical maximum is `r log(max(us$div_artists))`.
 
 ```{r plot_individual_artist_div, fig.cap = "Distribution of individual artist diversity"}
