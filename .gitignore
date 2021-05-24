@@ -14,5 +14,6 @@ code_sisley/
 journal.md
 *_cache
 *.png
+*.svg
 resultats/
 *.docx

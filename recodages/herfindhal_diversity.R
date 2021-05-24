@@ -8,8 +8,13 @@ load(here("data", "french_users.RData"))
 # }
 
 # Compute Shannon diversity
-compute_diversity <- function(freq){
-  prod(freq^freq)^-1
+compute_diversity <- function(freq, which = c("Herfindhal")){
+  if(which == "Shannon"){
+    prod(freq^freq)^-1
+  } 
+  if(which == "Herfindhal"){
+    sum(freq^2)^-1
+  }
 }
 
 # Compute overall probability distribution for artists, genre, legit
@@ -76,7 +81,10 @@ usd <- count(st, user_id, genre) %>%
   filter(!is.na(genre)) %>% 
   group_by(user_id) %>% 
   mutate(f = n / sum(n)) %>% 
-  summarize(div_genre = compute_diversity(f)) %>% 
+  summarize(div_genre = compute_diversity(f),
+            richness_genre_strict = n(),
+            richness_genre_10 = sum(n > 10),
+            richness_genre_50 = sum(n > 50)) %>% 
   ungroup() %>% 
   right_join(usd, by = "user_id")
 
@@ -84,7 +92,10 @@ usd <- count(st, user_id, genre) %>%
 usd <- count(st, user_id, art_id) %>% 
   group_by(user_id) %>% 
   mutate(f = n / sum(n)) %>% 
-  summarize(div_artists = compute_diversity(f)) %>% 
+  summarize(div_artists = compute_diversity(f),
+            richness_artists_strict = n(),
+            richness_artists_10 = sum(n > 10),
+            richness_artists_50 = sum(n > 50)) %>% 
   ungroup() %>% 
   right_join(usd, by = "user_id")
 
@@ -94,7 +105,10 @@ usd <- select(st, legit, user_id) %>%
   count(user_id, legit) %>% 
   group_by(user_id) %>% 
   mutate(f = n/sum(n)) %>% 
-  summarise(div_omni = compute_diversity(f)) %>% 
+  summarise(div_omni = compute_diversity(f),
+            richness_omni_strict = n(),
+            richness_omni_10 = sum(n > 10),
+            richness_omni_50 = sum(n > 50)) %>% 
   ungroup() %>% 
   right_join(usd, by = "user_id")
 
@@ -156,6 +170,12 @@ usd <- filter(st, !is.na(guid), !is.na(legit)) %>%
   ungroup() %>% 
   right_join(usd, by = "user_id")
 
+usd <- filter(st, !is.na(guid), !is.na(legit)) %>% 
+  count(user_id, guid, legit) %>% 
+  filter(guid == "Non guidée", legit == "Highbrow") %>% 
+  select(user_id, nb_highbrow_stock = n) %>% 
+  right_join(usd)
+
 usd <- filter(st, !is.na(type_guid), type_guid != "Non guidée", !is.na(legit)) %>% 
   count(user_id, type_guid, legit) %>% 
   group_by(user_id, type_guid) %>% 
@@ -187,49 +207,50 @@ usd <- filter(st, !is.na(type_guid), type_guid != "Non guidée", !is.na(legit)) 
 
 #### Diversité par mois
 
-st <- mutate(st, month = month(timestamp))
-
-## Diversité des genres
-usd <- count(st, month, user_id, genre) %>% 
-  filter(!is.na(genre)) %>% 
-  group_by(month, user_id) %>% 
-  mutate(f = n / sum(n)) %>% 
-  summarize(div_genre = compute_diversity(f)) %>% 
-  ungroup() %>% 
-  mutate(month = paste0("divm_genre_", month)) %>% 
-  pivot_wider(names_from = month, values_from = div_genre) %>% 
-  right_join(usd, by = "user_id")
-
-## Diversité des artistes écoutés
-usd <- count(st, month, user_id, art_id) %>% 
-  group_by(month, user_id) %>% 
-  mutate(f = n / sum(n)) %>% 
-  summarize(div_artists = compute_diversity(f)) %>% 
-  ungroup() %>% 
-  mutate(month = paste0("divm_art_", month)) %>% 
-  pivot_wider(names_from = month, values_from = div_artists) %>% 
-  right_join(usd, by = "user_id")
-
-## Diversité des niveaux de légitimité
-usd <- select(st, legit, user_id, month) %>% 
-  filter(legit != "Unclassified", !is.na(legit)) %>% 
-  count(month, user_id, legit) %>% 
-  group_by(month, user_id) %>% 
-  mutate(f = n/sum(n)) %>% 
-  summarise(div_omni = compute_diversity(f)) %>% 
-  ungroup() %>% 
-  mutate(month = paste0("divm_omni_", month)) %>% 
-  pivot_wider(names_from = month, values_from = div_omni) %>% 
-  right_join(usd, by = "user_id")
-
-usd <- count(st, user_id, month, guid) %>% 
-  mutate(guid = factor(guid, 
-                       levels = c("Guidée", "Non guidée"), 
-                       labels = c("rec", "stock")),
-         month = paste0("n_", guid, month)) %>% 
-  filter(!is.na(guid)) %>%
-  select(-guid) %>% 
-  pivot_wider(names_from = month, values_from = n) %>% 
-  right_join(usd, by = "user_id")
+# st <- mutate(st, month = month(timestamp))
+# 
+# ## Diversité des genres
+# usd <- count(st, month, user_id, genre) %>% 
+#   filter(!is.na(genre)) %>% 
+#   group_by(month, user_id) %>% 
+#   mutate(f = n / sum(n)) %>% 
+#   summarize(div_genre = compute_diversity(f)) %>% 
+#   ungroup() %>% 
+#   mutate(month = paste0("divm_genre_", month)) %>% 
+#   pivot_wider(names_from = month, values_from = div_genre) %>% 
+#   right_join(usd, by = "user_id")
+# 
+# ## Diversité des artistes écoutés
+# usd <- count(st, month, user_id, art_id) %>% 
+#   group_by(month, user_id) %>% 
+#   mutate(f = n / sum(n)) %>% 
+#   summarize(div_artists = compute_diversity(f)) %>% 
+#   ungroup() %>% 
+#   mutate(month = paste0("divm_art_", month)) %>% 
+#   pivot_wider(names_from = month, values_from = div_artists) %>% 
+#   right_join(usd, by = "user_id")
+# 
+# ## Diversité des niveaux de légitimité
+# usd <- select(st, legit, user_id, month) %>% 
+#   filter(legit != "Unclassified", !is.na(legit)) %>% 
+#   count(month, user_id, legit) %>% 
+#   group_by(month, user_id) %>% 
+#   mutate(f = n/sum(n)) %>% 
+#   summarise(div_omni = compute_diversity(f)) %>% 
+#   ungroup() %>% 
+#   mutate(month = paste0("divm_omni_", month)) %>% 
+#   pivot_wider(names_from = month, values_from = div_omni) %>% 
+#   right_join(usd, by = "user_id")
+# 
+# usd <- count(st, user_id, month, guid) %>% 
+#   mutate(guid = factor(guid, 
+#                        levels = c("Guidée", "Non guidée"), 
+#                        labels = c("rec", "stock")),
+#          month = paste0("n_", guid, month)) %>% 
+#   filter(!is.na(guid)) %>%
+#   select(-guid) %>% 
+#   pivot_wider(names_from = month, values_from = n) %>% 
+#   right_join(usd, by = "user_id")
 
 save(usd, file = here("data", "herfindhal.RData"))
+

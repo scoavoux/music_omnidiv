@@ -1,5 +1,5 @@
 ---
-title: "Data analysis for the paper on omnivorism"
+title: "Omnivorism: user-level analyses"
 author: "Samuel Coavoux"
 output: 
   html_document: 
@@ -19,8 +19,8 @@ opts_chunk$set(message = FALSE,
                echo = FALSE,
                warning = FALSE,
                results = 'asis',
-               fig.path = "plot/",
-               dpi = 1200)
+               fig.path = "plot/")#,
+               #dpi = 1200)
 ```
 
 ```{r packages}
@@ -31,33 +31,23 @@ library(forcats)
 library(janitor)
 library(stargazer)
 library(lme4)
-library(effsize)
-library(MuMIn)
 library(gridExtra)
 library(texreg)
 library(ggeffects)
-
-
-
-loadRData <- function(fileName){
-#loads an RData file, and returns it
-    load(fileName)
-    get(ls()[ls() != "fileName"])
-}
-
+# library(conflicted)
+# conflict_prefer("filter", "dplyr")
+# conflict_prefer("lag", "dplyr")
+# conflict_prefer("grid.draw.ggplot", "ggplot2")
+# conflict_prefer("plot.ggplot", "ggplot2")
+# conflict_prefer("print.ggplot", "ggplot2")
 ```
 
 ```{r data}
-load(here("data", "streams.RData"))
 load(here("data", "french_users.RData"))
-load(here("data", "songs_artists.RData"))
-
-# Souci avec le suivant
-# source(here("recodages", "in_english.R"))
 # source(here("recodages", "herfindhal_diversity.R"))
 # save(usd, file = here("data", "herfindhal.RData"))
 load(here("data", "herfindhal.RData"))
-
+source(here("recodages", "in_english.R"))
 ```
 
 ```{r misc_options}
@@ -80,240 +70,122 @@ We work on the usd database = users with exponential of shannon entropy See scri
 
 We transform diversity: artists = log(artist).
 
-```{r}
+```{r coding_logdiversity}
 usd <- mutate(usd, across(starts_with("div_artists"), ~log(.x)))
 #usd <- mutate(usd, across(starts_with("div_genre"), ~sqrt(.x)))
+# Do not define stock/rec diversity when less than 100 data points
+usd <- mutate(usd, across(.cols = matches("div_\\w+_stock"), ~ifelse(nb_stock < 100, NA, .x))) %>% 
+  mutate(across(.cols = matches("div_\\w+_rec"), ~ifelse(nb_guid < 100, NA, .x)))
+
 ```
 
-```{r}
+```{r coding_selectvariables}
 usd <- select(usd, -ends_with("algo"), -ends_with("edit"))
 ```
 
-# Stat descriptive
+# Personnes
+
+```{r hist_us_age}
+us <- mutate(us, age = ifelse(age > 90, NA, age))
+
+ggplot(us, aes(age)) +
+  geom_histogram()
+```
+
+# Diversity
 
 ```{r}
-tabyl(st, context_cat) %>% 
+x <- select(usd, starts_with("richness"), div_artists, div_genre, div_omni) %>% 
+  pivot_longer(everything()) %>% 
+  mutate(Level = str_extract(name, "genre|artists|omni"),
+         Type = str_extract(name, "strict|10|50"),
+         Type = ifelse(Type == "strict", "1", Type),
+         Type = ifelse(is.na(Type), "Herfindhal", paste(Type, "Richness", sep = "-")),
+         Type = factor(Type, levels = c("1-Richness", "10-Richness", "50-Richness", "Herfindhal")),
+         value = ifelse(Level == "artists" & Type != "Herfindhal", log(value), value))
+
+```
+
+
+```{r, fig.cap = "Artist diversity, richness vs. Herfindhal"}
+filter(x, Level == "artists") %>% 
+  ggplot(aes(value)) +
+    geom_histogram() +
+    labs(x = "Diversity", y = "Count") +
+    facet_wrap(~Type, scales = "free_y", ncol = 2)
+
+```
+
+```{r, fig.cap = "Genre diversity, richness vs. Herfindhal"}
+filter(x, Level == "genre") %>% 
+  ggplot(aes(value)) +
+    geom_histogram(binwidth = 0.5) +
+    labs(x = "Diversity", y = "Count") +
+    facet_wrap(~Type, scales = "free_y", ncol = 2)
+
+```
+
+```{r, fig.cap = "Legitimacy diversity, richness vs. Herfindhal"}
+filter(x, Level == "omni") %>% 
+  ggplot(aes(value)) +
+    geom_histogram(binwidth = 0.1) +
+    labs(x = "Diversity", y = "Count") +
+    facet_wrap(~Type, scales = "free_y", ncol = 2)
+```
+
+```{r}
+x <- select(usd, starts_with("richness"), div_artists, div_genre, div_omni, user_id) %>% 
+  pivot_longer(-user_id) %>% 
+  mutate(Level = str_extract(name, "genre|artists|omni"),
+         Type = str_extract(name, "strict|10|50"),
+         Type = ifelse(Type == "strict", "1", Type),
+         Type = ifelse(is.na(Type), "Herfindhal", paste(Type, "Richness", sep = "-")),
+         Type = factor(Type, levels = c("1-Richness", "10-Richness", "50-Richness", "Herfindhal")),
+         value = ifelse(Level == "artists" & Type != "Herfindhal", log(value), value))
+
+```
+
+```{r}
+ggplot(usd, aes(factor(richness_genre_strict), div_genre)) +
+  geom_boxplot()
+  geom_density_2d_filled()
+```
+
+```{r}
+ggplot(usd, aes(factor(richness_omni_strict), div_omni)) +
+  geom_boxplot()
+ # geom_density_2d_filled()
+```
+
+
+```{r}
+GGally::ggpairs(select(usd, starts_with("richness_artists"), div_artists))
+```
+
+```{r}
+GGally::ggpairs(select(usd, starts_with("richness_genre"), div_genre))
+```
+
+```{r}
+GGally::ggpairs(select(usd, starts_with("richness_omni"), div_omni))
+```
+
+
+
+```{r}
+tabyl(usd, richness_omni_strict) %>% 
   adorn_pct_formatting() %>% 
   kable()
 ```
 
 ```{r}
-tabyl(st, type_guid) %>% 
+tabyl(usd, richness_omni_50) %>% 
   adorn_pct_formatting() %>% 
   kable()
 ```
 
-## Personnes
 
-```{r}
-tabyl(dat = us, var1 = passifs, var2 = gender) %>% 
-  kable(caption="Distribution of gender")
-```
-
-```{r}
-skimr::skim(us, age) %>% 
-  kable(caption = "Distribution of age")
-```
-
-## Plays
-
-Simple descriptive statistics show a highly skewed distribution of plays. A few artists gather most of the attention. This holds true when examining the number of plays, or the number of distinct users who listened to the artist's songs. The distribution is slightly more skewed for the number of play, showing that stars are not only listened by more people, but also are more listened to overall. The following figure shows the long tail distribution of consumption. The distribution at the song and album level (not shown) follow the same pattern.
-
-```{r long_tail_plot, fig.cap = "Distribution of artists by # of distinct users and # of listen"}
-gg1 <- arrange(ar, desc(n_listen)) %>%
-  filter(!is.na(n_listen)) %>% 
-  mutate(rank = 1:n()) %>%
-  ggplot(aes(rank, n_listen)) +
-    geom_point() +
-    geom_line() +
-    labs(x = "Artist rank", y = "# of listen (log scale)") +
-    scale_y_log10()
-
-gg2 <- arrange(ar, desc(n_users)) %>%
-  filter(!is.na(n_listen)) %>% 
-  mutate(rank = 1:n()) %>%
-  ggplot(aes(rank, n_users)) +
-    geom_point() +
-    geom_line() +
-    labs(x = "Artist rank", y = "# of distinct users (log scale)") +
-    scale_y_log10(breaks = c(0, 10, 100, 1000))
-
-grid.arrange(gg1, gg2, ncol = 2)
-
-```
-
-```{r cdf_longtail_plot, fig.cap = "Cumulative listens ; the plot O Celma uses"}
-br <- c(1, 10, 100, 1000, 10000, 100000)
-filter(ar, !is.na(n_listen)) %>% 
-  arrange(desc(n_listen)) %>% 
-  mutate(n_cum = cumsum(n_listen) / sum(n_listen),
-         rank = row_number()) %>% 
-  ggplot(aes(rank, n_cum)) +
-    geom_point() +
-    scale_x_log10(breaks = br, labels = as.character(br)) +
-    theme(panel.grid.minor.x = element_blank()) +
-    labs(y="Cumulative frequency of play", x = "Artist rank (log scale)")
-
-```
-
-
-```{r long_tail_album, eval=FALSE}
-gg1 <- arrange(al, desc(n_listen)) %>%
-  filter(!is.na(n_listen)) %>% 
-  mutate(rank = 1:n()) %>%
-  ggplot(aes(rank, n_listen)) +
-    geom_point() +
-    geom_line() +
-    labs(x = "Album rank", y = "# of listen (log scale)") +
-    scale_y_log10()
-
-gg2 <- arrange(al, desc(n_users)) %>%
-  filter(!is.na(n_listen)) %>% 
-  mutate(rank = 1:n()) %>%
-  ggplot(aes(rank, n_users)) +
-    geom_point() +
-    geom_line() +
-    labs(x = "Album rank", y = "# of distinct users (log scale)") +
-    scale_y_log10(breaks = c(0, 10, 100, 1000))
-
-grid.arrange(gg1, gg2, ncol = 2)
-```
-
-Despite the problems highlighted infra, we can compare this distribution with offline sales in 2008 as studied by @bourreau2011_Ladiversiteculturelle. We note that the  overall distribution is similar, at least for the metrics that we can replicate, although digital plays are a bit less concentrated at the 50% level.
-
-```{r initialize_album_data}
-df <- count(st, alb_id) %>% 
-  arrange(desc(n)) %>% 
-  mutate(n_cum = cumsum(n) / sum(n))
-
-```
-
-
-```{r table_comparison_bourreau}
-data_frame(` ` = c("Frequency of albums making up to 50% of total sales/play",
-                   "Frequency of albums making up to 80% of total sales/play"),
-           `Physical sales (Bourreau et al., 2011)` = c("0.35%", "6.7%"),
-           `Digital plays (our data)` = paste0(c((sum(df$n_cum < 0.5) / nrow(df) * 100) %>% round(1),
-                                                 (sum(df$n_cum < 0.8) / nrow(df) * 100) %>% round(1)),"%")) %>% 
-  kable(caption = "Comparison of distribution of digital plays (2013) and physical sales (2008)")
-```
-
-```{r check_top_100, eval = FALSE}
-data_frame(`Variable` = c("Top 100", "Top 1000"),
-           `Physical sales (Bourreau et al., 2011)` = c("38%", "64%"),
-           `Digital plays (our data)` = paste0(c((slice(df, 100)$n_cum * 100) %>% round(1), (slice(df, 1000)$n_cum * 100) %>% round(1)), "%")
-) %>% 
-  kable(caption = "Proportion of top 100/1000 albums in total plays")
-
-```
-
-Concentration is usually measured through a Gini index. While we adopt another measure in the rest of the article, they are easier to read, as they range between 0 (total equality) and 1 (total concentration, one artist has all the attention). The very high gini index (table below) indicate high inequalities.
-
-<!-- Sans doute pas la meilleure chose à faire de chercher le Gini plutôt que autre chose. -->
-
-```{r table_gini_concentration}
-data_frame(Metric = c("# of listen",
-                      "# of distinct users"),
-           Gini = c(reldist::gini(ar$n_listen[!is.na(ar$n_listen)]),
-                    reldist::gini(ar$n_users[!is.na(ar$n_users)])) %>% round(3)) %>% 
-  kable(caption = "Concentration of consumption")
-```
-
-It shall be noted that we did not have access to the full catalog of the music service, but only the tracks listened to by our sample. The service does not release the number of different artists available, but claims to host 35M tracks, of which less than 1M are listened by our sample. This means that there probably are several thousand artists present in the catalog but not used by people from our sample (which should appear in the longer tail of the previous figure).
-
-```{r table_description_catalog}
-tibble(
-  Metric = c("# of distinct artists", "# of distinct tracks"), 
-  Sample = c(nrow(distinct(st, art_id)),
-             nrow(distinct(st, sng_id))),
-  Catalog = c("Unknown", "35M")) %>% 
-  kable(caption = "Artists and tracks in the catalog and in the sample")
-```
-
-### The tyranny of popular music
-
-<!-- Maybe add here the number of different users. -->
-
-```{r table_freq_genre}
-x <- filter(st, !is.na(genre)) %>% 
-  group_by(genre) %>% 
-  summarise(`# of plays` = n(),
-            `# of unique artists` = n_distinct(art_id)) %>% 
-  arrange(desc(`# of plays`)) %>% 
-  mutate(`% of plays` = `# of plays`/sum(`# of plays`)*100,
-         `Cumul. % of plays` = cumsum(`% of plays`),
-         `% of unique artists` = `# of unique artists`/sum(`# of unique artists`)*100,
-         `Cumul. % of unique artists` = cumsum(`% of unique artists`))
-
-mutate_at(x, .vars = vars(`% of plays`:`Cumul. % of unique artists`), .funs = funs(paste0(round(., 1), "%"))) %>% 
-  kable(format.args = list(big.mark = " "))
-```
-
-```{r barplot_freq_selected_genres}
-select(x, genre, `% of plays`, `% of unique artists`) %>% 
-  gather(key, value, -genre) %>% 
-  filter(!(genre %in% c("Reggae", "Blues", "Musicals", "Movies/games", "Kids' music"))) %>% 
-  mutate(genre = factor(genre, levels = (x$genre)) %>% droplevels()) %>% 
-  ggplot(aes(genre, value, fill = key)) +
-  geom_col(position = "dodge") +
-  coord_flip() +
-  labs(y = "Proportion (in %)", x = "Genre", fill = "Metric")
-```
-
-```{r barplot_freq_legit}
-x <- filter(st, !is.na(legit)) %>% 
-  group_by(legit) %>% 
-  summarise(`# of plays` = n(),
-            `# of unique artists` = n_distinct(art_id)) %>% 
-  arrange(desc(`# of plays`)) %>% 
-  mutate(`% of plays` = `# of plays`/sum(`# of plays`)*100,
-         `Cumul. % of plays` = cumsum(`% of plays`),
-         `% of unique artists` = `# of unique artists`/sum(`# of unique artists`)*100,
-         `Cumul. % of unique artists` = cumsum(`% of unique artists`))
-
-select(x, legit, `% of plays`, `% of unique artists`) %>% 
-  gather(key, value, -legit) %>% 
-  ggplot(aes(legit, value, fill = key)) +
-  geom_col(position = "dodge") +
-  coord_flip() +
-  labs(y = "Proportion (in %)", x = "Legitimacy level", fill = "Metric")
-```
-
-
-```{r table_freq_legit}
-mutate_at(x, .vars = vars(`% of plays`:`Cumul. % of unique artists`), .funs = funs(paste0(round(., 1), "%"))) %>% 
-  kable(format.args = list(big.mark = " "))
-
-```
-
-Analysis of the top artists shows that: they are indeed stars (well known), none are from highbrow genre. Differences between number of play and number of users show that some are more consumed in a devoted sub-population (although it is also quite large) while other are more consensual (listened by everyone, but not as much). Notable representant of the first kind are Jul and Booba (French hip-hop), Eminem and Michael Jackson ; of the second are Lilly Wood And The Prick and Asaf Avidan (folk rock "France Inter" style)
-
-```{r table_top_artists}
-top_li <- arrange(ar, desc(n_listen)) %>% 
-  slice(1:50) %>% 
-  select(art_name, n_listen, n_users) %>% 
-  mutate(rank_listen = 1:50)
-
-top_us <- arrange(ar, desc(n_users)) %>% 
-  slice(1:50) %>% 
-  select(art_name, n_listen, n_users) %>% 
-  mutate(rank_user = 1:50)
-
-full_join(top_li, top_us) %>% 
-  mutate(diff = rank_user - rank_listen) %>% 
-  mutate_all(funs(ifelse(is.na(.), "", .))) %>% 
-  rename(`Artist name` = art_name,
-         `# Listen` = n_listen,
-         `# Distinct users` = n_users,
-         `# Listen rank` = rank_listen,
-         `# Distinct user rank` = rank_user,
-         `Difference` = diff) %>% 
-  kable(caption = "Fifty most listened artists")
-```
-
-## Diversité
-
-```{r , fig.cap="Raw diversity"}
+```{r hist_raw_diversity, fig.cap="Raw diversity"}
 select(usd, starts_with("div_")) %>% pivot_longer(everything(), names_to = "names", values_to = "values") %>% 
   mutate(names = factor(names, levels = c("div_artists", "div_artists_rec", "div_artists_stock",
                                           "div_genre", "div_genre_rec", "div_genre_stock",
@@ -327,7 +199,19 @@ select(usd, starts_with("div_")) %>% pivot_longer(everything(), names_to = "name
     facet_wrap(~names, scales = "free", ncol = 3)
 ```
 
-```{r , fig.cap="Density comparison of recommended and stock plays"}
+```{r}
+GGally::ggpairs(select(usd, div_artists, div_genre, div_omni))
+```
+
+```{r}
+GGally::ggpairs(select(usd, div_artists_stock, div_artists_rec, 
+                       div_genre_stock, div_genre_rec, 
+                       div_omni_stock, div_omni_rec))
+```
+
+# Recommended and stock diversity
+
+```{r density_recstock, fig.cap="Density comparison of recommended and stock plays"}
 select(usd, starts_with("div_"), -div_artists, -div_genre, -div_omni) %>%
   pivot_longer(everything(), names_to = "names", values_to = "values") %>% 
   mutate(names = str_remove(names, "div_")) %>% 
@@ -337,7 +221,7 @@ select(usd, starts_with("div_"), -div_artists, -div_genre, -div_omni) %>%
     facet_wrap(~type, scales = "free")
 ```
 
-```{r , fig.cap="Comparison between stock and recommended diversity on a user basis"}
+```{r scatter_recstock_diversity, fig.cap="Comparison between stock and recommended diversity on a user basis"}
 select(usd, user_id, starts_with("div_"), -div_artists, -div_genre, -div_omni) %>%
   pivot_longer(-user_id, names_to = "names", values_to = "values") %>% 
   mutate(names = str_remove(names, "div_")) %>% 
@@ -345,10 +229,11 @@ select(usd, user_id, starts_with("div_"), -div_artists, -div_genre, -div_omni) %
   pivot_wider(names_from = guid, values_from = values) %>% 
   ggplot(aes(rec, stock)) +
     geom_point() +
-    facet_wrap(~type, scales = "free", ncol = 2)
+    facet_wrap(~type, scales = "free", ncol = 2) +
+    geom_abline(slope = 1, intercept = 0, color = "red")
 ```
 
-```{r, fig.cap = "Mean stock and recommended diversity"}
+```{r , fig.cap = "Mean stock and recommended diversity"}
 select(usd, user_id, starts_with("div_"), -div_artists, -div_genre, -div_omni) %>%
   pivot_longer(-user_id, names_to = "names", values_to = "values") %>% 
   mutate(names = str_remove(names, "div_")) %>% 
@@ -421,17 +306,17 @@ select(usd, user_id, starts_with("div_"), -div_artists, -div_genre, -div_omni, n
           legend.justification = c(1, 0))
 ```
 
-## Algo
+# Use of recommandations
 
-```{r table_distribution_stock_reco_play}
-tabyl(st, guid) %>% 
-  kable(caption = "Distribution of guided/unguided plays")
+```{r freq_us_activite}
+tabyl(dat = us, var1 = passifs, var2 = gender) %>% 
+  select(-NA_) %>% 
+  adorn_percentages() %>% 
+  adorn_pct_formatting() %>% 
+  kable(caption="Activity and gender")
 ```
 
-```{r table_distribution_stock_reco_algo_ed_play}
-tabyl(st, type_guid) %>% 
-  kable(caption = "Distribution of recommended plays")
-```
+# Omnivorism
 
 ```{r reco_density, fig.cap = "Distribution of frequency of use of recommendation"}
 ggplot(us, aes(fq)) +
@@ -448,9 +333,9 @@ ggplot(us, aes(fq)) +
 ## Link with use of algo
 
 ```{r diversity_X_dip_profile_table}
-filter(us, !is.na(passifs)) %>%
+filter(usd, !is.na(passifs)) %>%
   group_by(passifs) %>%
-  summarize(`Mean log (artists) diversity (sd)` = paste0(round(mean(log(div_artists)), 1), " (", round(sd(log(div_artists)), 1), ")"),
+  summarize(`Mean log (artists) diversity (sd)` = paste0(round(mean(div_artists), 1), " (", round(sd(div_artists), 1), ")"),
             `Mean (genres) diversity (sd)` = paste0(round(mean(div_genre), 1), " (", round(sd(div_genre), 1), ")"),
             `Mean (omnivore) diversity (sd)` = paste0(round(mean(div_omni, na.rm = TRUE), 1), " (", round(sd(div_omni, na.rm = TRUE), 1), ")")) %>%
   rename(` ` = passifs) %>%
@@ -499,7 +384,7 @@ doflm <- lm(div_omni   ~ I(fq*10), data = us)
 donlm <- lm(div_omni   ~ log(nb_ecoutes), data = us)
 dolm  <- lm(div_omni   ~ I(fq*10) + age + gender + I(freq_nouveaute*10) + log(nb_ecoutes), data = us)
 
-texreg(list(daflm, dalm,
+htmlreg(list(daflm, dalm,
             dgflm, dglm,
             doflm, dolm),
        custom.coef.names = c("Intercept",
@@ -518,7 +403,7 @@ dalm  <- lm(div_artists ~ I(fa*10) + I(fe*10) + age + gender + I(freq_nouveaute*
 dglm  <- lm(div_genre   ~ I(fa*10) + I(fe*10) + age + gender + I(freq_nouveaute*10) + log(nb_ecoutes), data = us)
 dolm  <- lm(div_omni    ~ I(fa*10) + I(fe*10) + age + gender + I(freq_nouveaute*10) + log(nb_ecoutes), data = us)
 
-texreg(list(dalm, dglm, dolm),
+htmlreg(list(dalm, dglm, dolm),
        custom.coef.names = c("Intercept",
                              "Freq. algo. (10pp)",
                              "Freq. edit. (10pp)",
@@ -531,19 +416,18 @@ texreg(list(dalm, dglm, dolm),
 
 ```
 
-
 # Fixed effects models
 
-
-
 ```{r}
-usd <- filter(usd, nb_guid > 100, nb_stock > 100, across(.cols = starts_with("div_"), .fns = ~ !is.na(.x)))
+# Three solutions; results not very different. I prefer the first one, more explicit
+usd_lm <- filter(usd, nb_guid > 100, nb_stock > 100, across(.cols = starts_with("div_"), .fns = ~ !is.na(.x)))
+#usd_lm <- usd
 ```
 
 
 
 ```{r}
-x <- select(usd, user_id, div_artists_rec, div_artists_stock, nb_guid, nb_stock, fq, freq_nouveaute, gender, age)
+x <- select(usd_lm, user_id, div_artists_rec, div_artists_stock, nb_guid, nb_stock, fq, freq_nouveaute, gender, age)
 x <- pivot_longer(x, cols = starts_with("div_artists")) %>% 
   mutate(name = str_extract(name, "(rec|stock)$") %>% factor(levels = c("stock", "rec")), 
          nb = ifelse(name == "rec", nb_guid, nb_stock)) %>% 
@@ -555,11 +439,11 @@ x <- mutate(x, lognb = log(nb))
 
 # Quels sont les niveaux?
 fe_us_artdiv <- lmer(value ~ name + lognb + gender + ( 1 | user_id), data = x)
-fe_re_artdiv <- lmer(value ~ lognb + gender + ( 1 + lognb | name), data = x)
+fe_us_artdiv_uncond <- lmer(value ~ 1 + ( 1 | user_id), data = x)
 ```
 
 ```{r}
-x <- select(usd, user_id, div_genre_rec, div_genre_stock, nb_guid, nb_stock, fq, freq_nouveaute, gender, age)
+x <- select(usd_lm, user_id, div_genre_rec, div_genre_stock, nb_guid, nb_stock, fq, freq_nouveaute, gender, age)
 x <- pivot_longer(x, cols = starts_with("div_genre")) %>% 
   mutate(name = str_extract(name, "(rec|stock)$") %>% factor(levels = c("stock", "rec")), 
          nb = ifelse(name == "rec", nb_guid, nb_stock)) %>% 
@@ -571,12 +455,12 @@ x <- mutate(x, lognb = log(nb))
 
 # Quels sont les niveaux?
 fe_us_genrediv <- lmer(value ~ name + lognb + gender + ( 1 | user_id), data = x)
-fe_re_genrediv <- lmer(value ~ lognb + gender + ( 1 + lognb | name), data = x)
+fe_us_genrediv_uncond <- lmer(value ~ 1 + ( 1 | user_id), data = x)
 ```
 
 
 ```{r}
-x <- select(usd, user_id, div_omni_rec, div_omni_stock, nb_guid, nb_stock, fq, freq_nouveaute, gender, age)
+x <- select(usd_lm, user_id, div_omni_rec, div_omni_stock, nb_guid, nb_stock, fq, freq_nouveaute, gender, age)
 x <- pivot_longer(x, cols = starts_with("div_omni")) %>% 
   mutate(name = str_extract(name, "(rec|stock)$") %>% factor(levels = c("stock", "rec")), 
          nb = ifelse(name == "rec", nb_guid, nb_stock)) %>% 
@@ -588,18 +472,38 @@ x <- mutate(x, lognb = log(nb))
 
 # Quels sont les niveaux?
 fe_us_omnidiv <- lmer(value ~ name + lognb + gender + ( 1 | user_id), data = x)
-fe_re_omnidiv <- lmer(value ~ lognb + gender + ( 1 + lognb | name), data = x)
-
+fe_us_omnidiv_uncond <- lmer(value ~ 1 + ( 1 | user_id), data = x)
 ```
 
-## Niveau 1 = contexte, niveau 2 = personne
+## Unconditional models
+
+```{r}
+library(sjstats)
+library(sjPlot)
+
+tab_model(fe_us_artdiv_uncond, fe_us_genrediv_uncond, fe_us_omnidiv_uncond)
+```
+
+## MLM
 
 ```{r}
 fe_us <- list(fe_us_artdiv, fe_us_genrediv, fe_us_omnidiv)
-texreg(fe_us,
-       custom.model.names = c("Artists div.", "Genre div.", "Omnivorism"),
-       custom.coef.names = c("Intercept", "Contexts: rec.", "Log nb. plays", "Gender: Male"))
+
+htmlreg(fe_us,
+        custom.model.names = c("Artists div.", "Genre div.", "Omnivorism"),
+        custom.coef.names = c("Intercept", "Contexts: rec.", "Log nb. plays", "Gender: Male"))
 ```
+
+```{r}
+tab_model(fe_us_artdiv, fe_us_genrediv, fe_us_omnidiv, p.val = "kr")
+```
+
+```{r}
+sd(usd_lm$div_artists)
+sd(usd_lm$div_genre)
+sd(usd_lm$div_omni)
+```
+
 
 ```{r}
 plotreg(fe_us,
@@ -618,8 +522,8 @@ z <- ranef(fe_us_omnidiv)$user_id %>%
   rownames_to_column("User") %>% 
   mutate(model = "Omnivorism")
 us_ranef <- bind_rows(x, y, z) %>% 
-  rename(intercept = "(Intercept)")
-
+  rename(intercept = "(Intercept)") %>% 
+  tibble()
 ```
 
 ```{r}
@@ -633,6 +537,11 @@ group_by(us_ranef, model) %>%
     labs(x = "", y = "User-level random effect")
 ```
 
+```{r}
+pivot_wider(us_ranef, names_from = "model", values_from = "intercept") %>% 
+  select(-User) %>% 
+  GGally::ggpairs()
+```
 
 ```{r}
 pivot_wider(us_ranef, names_from = model, values_from = intercept) %>% 
@@ -682,40 +591,9 @@ ggpredict(fe_us_omnidiv, c("lognb", "name"), type="random") %>%
 
 ```
 
-
-## Niveau 1 = personne, niveau 2 = contexte
-
-```{r}
-texreg(list(fe_re_artdiv, fe_re_genrediv, fe_re_omnidiv),
-       custom.model.names = c("Artists div.", "Genre div.", "Omnivorism"),
-       custom.coef.names = c("Intercept", "Log nb. plays", "Gender: Male"))
-
-```
+# Omnivorism
 
 ```{r}
-list(fe_re_artdiv, fe_re_genrediv, fe_re_omnidiv) %>% lapply(ranef)
+count(usd, Highbrow > 0.1 & Lowbrow > 0.1 & Middlebrow > 0.1)
 ```
 
-```{r}
-plotreg(list(fe_re_artdiv, fe_re_genrediv, fe_re_omnidiv))
-```
-
-```{r}
-ggpredict(fe_re_artdiv, c("lognb", "name"), type="random") %>% 
-  ggplot(aes(x, predicted, colour = group)) +
-    stat_smooth(method = "lm") +
-    labs(y = "Predicted artist diversity", x = "Log nb. of play", colour = "Contexts")
-```
-
-```{r}
-ggpredict(fe_re_genrediv, c("lognb", "name"), type="random") %>% 
-  ggplot(aes(x, predicted, colour = group)) +
-    stat_smooth(method = "lm") +
-    labs(y = "Predicted genre diversity", x = "Log nb. of play", group = "Contexts")
-```
-
-```{r, eval=FALSE}
-ggpredict(fe_re_omnidiv, c("lognb", "name"), type="random") %>% 
-  ggplot(aes(x, predicted, colour = group)) +
-    stat_smooth(method = "lm")
-```
