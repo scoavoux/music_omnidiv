@@ -1,0 +1,88 @@
+---
+title: "Omnivorism-New base"
+author: "Samuel Coavoux"
+date: "09/05/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE,
+               error = FALSE,
+               echo = FALSE,
+               warning = FALSE,
+               results = 'asis',
+               fig.path = "plot/",
+               dpi = 1200)
+```
+
+```{r packages}
+library(tidyverse)
+library(lubridate)
+library(here)
+library(forcats)
+library(janitor)
+library(stargazer)
+library(gridExtra)
+library(lme4)
+library(effsize)
+theme_set(theme_bw())
+```
+
+```{r data}
+d <- read_csv(here("data", "table_for_omnivorism.csv"))
+```
+
+```{r}
+names(d)
+```
+
+```{r}
+ggplot(d, aes(survey_richness_genre, streams_richness_genre_total)) +
+  geom_point()
+```
+
+```{r}
+select(d, survey_richness_genre, streams_richness_genre_total, streams_shannon_genre_total) %>% 
+  pivot_longer(everything()) %>% 
+  ggplot(aes(value)) +
+    geom_histogram() +
+    facet_wrap(~name)
+```
+
+
+```{r}
+ggplot(d, aes(survey_richness_genre, streams_shannon_genre_total)) +
+  geom_point()
+```
+
+```{r}
+d <- mutate(d, across(starts_with("streaming_richness_legit_"), ~ifelse(is.na(.x), 0, .x)))
+d <- mutate(d, survey_richness_legit = ((survey_richness_legit_low > 0) + 
+                                          (survey_richness_legit_middle > 0) + 
+                                          (survey_richness_legit_high > 0)),
+            streams_richness_legit = ((streams_richness_legit_low_total > 0) + 
+                                          (streams_richness_legit_middle_total > 0) + 
+                                          (streams_richness_legit_high_total > 0)))
+
+```
+
+
+```{r}
+ggplot(d, aes(survey_richness_legit, streams_shannon_legit_total)) +
+  geom_point()
+```
+
+```{r}
+select(d, streams_richness_legit, streams_shannon_legit_total) %>% 
+  pivot_longer(everything()) %>% 
+  ggplot(aes(value)) +
+    geom_histogram() +
+    facet_wrap(~name)
+```
+
+```{r}
+ggplot(d, aes(demo_diploma_level, streams_shannon_genre_total)) +
+  geom_boxplot() +
+  coord_flip()
+```

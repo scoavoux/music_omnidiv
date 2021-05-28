@@ -17,14 +17,14 @@ st <- mutate(st, timestamp = as_datetime(as.numeric(timestamp), tz="Europe/Paris
 st <- filter(st, context_name == "playlist_page")
 
 
-urls <- data_frame(id = unique(st$context_id),
+urls <- tibble(id = unique(st$context_id),
                    url = paste0("http://api.deezer.com/playlist/", id))
 
 ## At start, create l ; then, load it from data/genres.RData
 # l <- vector("list", length = nrow(urls))
 # load("data/playlists_raw.RData")
 
-for(i in i:nrow(urls)){
+for(i in 1:nrow(urls)){
   l[[i]] <- fromJSON(urls$url[i])
   ## API request limit: 50 requests every 5 seconds
   Sys.sleep(.11)

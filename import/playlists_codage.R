@@ -48,7 +48,7 @@ extract_data <- function(x){
 ## Fabriquer pl
 
 pl <- map(l, extract_data) %>% 
-  bind_rows(x) %>% 
+  bind_rows() %>% 
   right_join(pl, "id") %>% 
   distinct(id, .keep_all = TRUE)
 
