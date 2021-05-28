@@ -16,10 +16,13 @@ max_delay <- 15
 # 
 # st <- left_join(st, user_dic)
 # 
+st <- arrange(st, user_id, timestamp)
+st <- mutate(st, timestamp = ymd_hms(timestamp),
+             duration  = seconds(duration))
 st <- group_by(st, user_id)
-st <- arrange(st, timestamp)
-st <- mutate(st, delay = difftime(timestamp, lag(timestamp, default = 1) + lag(duration, default = 0), units = "mins"))
-st <- mutate(st, change = ifelse(delay > max_delay, 1, 0))
+st <- mutate(st, delay = difftime(timestamp, lag(timestamp), units = "mins"))
+st <- mutate(st, change = ifelse(delay > max_delay, 1, 0), 
+             change = ifelse(is.na(change), 0, change))
 st <- mutate(st, streak = paste(user_id, cumsum(change), sep = "_"))
 st <- ungroup(st)
 save(st, file = "data/streams_streak.RData")

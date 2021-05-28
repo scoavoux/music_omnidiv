@@ -1,0 +1,405 @@
+---
+title: "Omnivorism: track-level analyses"
+author: "Samuel Coavoux"
+output: 
+  html_document: 
+    fig_caption: yes
+    fig_height: 7
+    fig_width: 10
+    number_sections: yes
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE,
+               error = FALSE,
+               echo = FALSE,
+               warning = FALSE,
+               results = 'asis',
+               fig.path = "plot/")#,
+               #dpi = 1200)
+```
+
+```{r packages}
+library(tidyverse)
+library(lubridate)
+library(here)
+library(forcats)
+library(janitor)
+library(stargazer)
+library(lme4)
+library(gridExtra)
+library(texreg)
+library(ggeffects)
+```
+
+```{r data}
+load(here("data", "streams.RData"))
+load(here("data", "french_users.RData"))
+load(here("data", "songs_artists.RData"))
+# source(here("recodages", "herfindhal_diversity.R"))
+# save(usd, file = here("data", "herfindhal.RData"))
+load(here("data", "herfindhal.RData"))
+source(here("recodages", "in_english.R"))
+```
+
+```{r misc_options}
+if(isTRUE(getOption('knitr.in.progress'))) {
+    output_type <- "html"#
+} else {
+    output_type <- "text"
+}
+
+theme_set(theme_bw(base_size = 12))
+
+knit_hooks$set(inline = function(x) {
+  prettyNum(x, big.mark=" ")
+})
+options(scipen = 99)
+
+```
+
+We work on the usd database = users with exponential of shannon entropy See scripts for details about their computation.
+
+We transform diversity: artists = log(artist).
+
+```{r coding_logdiversity}
+usd <- mutate(usd, across(starts_with("div_artists"), ~log(.x)))
+#usd <- mutate(usd, across(starts_with("div_genre"), ~sqrt(.x)))
+```
+
+```{r coding_selectvariables}
+usd <- select(usd, -ends_with("algo"), -ends_with("edit"))
+```
+
+# Contexts
+
+```{r freq_st_contextes}
+count(st, context_cat, guid) %>% 
+  filter(!(context_cat %in% c("ND", "unknown"))) %>% 
+  arrange(guid) %>% 
+  mutate(f = n / sum(n) * 100) %>% 
+  kable()
+```
+
+```{r freq_st_contextes2}
+count(st, context_cat, guid, type_guid) %>% 
+  filter(!(context_cat %in% c("ND", "unknown"))) %>% 
+  arrange(type_guid, guid) %>% 
+  mutate(f = n / sum(n) * 100) %>% 
+  kable()
+```
+
+
+```{r freq_st_reco}
+tabyl(st, type_guid) %>% 
+  adorn_pct_formatting() %>% 
+  kable()
+```
+
+# Concentration of plays
+
+Simple descriptive statistics show a highly skewed distribution of plays. A few artists gather most of the attention. This holds true when examining the number of plays, or the number of distinct users who listened to the artist's songs. The distribution is slightly more skewed for the number of play, showing that stars are not only listened by more people, but also are more listened to overall. The following figure shows the long tail distribution of consumption. The distribution at the song and album level (not shown) follow the same pattern.
+
+```{r long_tail_plot, fig.cap = "Distribution of artists by # of distinct users and # of listen"}
+gg1 <- arrange(ar, desc(n_listen)) %>%
+  filter(!is.na(n_listen)) %>% 
+  mutate(rank = 1:n()) %>%
+  ggplot(aes(rank, n_listen)) +
+    geom_point() +
+    geom_line() +
+    labs(x = "Artist rank", y = "# of listen (log scale)") +
+    scale_y_log10()
+
+gg2 <- arrange(ar, desc(n_users)) %>%
+  filter(!is.na(n_listen)) %>% 
+  mutate(rank = 1:n()) %>%
+  ggplot(aes(rank, n_users)) +
+    geom_point() +
+    geom_line() +
+    labs(x = "Artist rank", y = "# of distinct users (log scale)") +
+    scale_y_log10(breaks = c(0, 10, 100, 1000))
+
+grid.arrange(gg1, gg2, ncol = 2)
+
+```
+
+```{r cdf_longtail_plot, fig.cap = "Cumulative listens ; the plot O Celma uses"}
+br <- c(1, 10, 100, 1000, 10000, 100000)
+filter(ar, !is.na(n_listen)) %>% 
+  arrange(desc(n_listen)) %>% 
+  mutate(n_cum = cumsum(n_listen) / sum(n_listen),
+         rank = row_number()) %>% 
+  ggplot(aes(rank, n_cum)) +
+    geom_point() +
+    scale_x_log10(breaks = br, labels = as.character(br)) +
+    theme(panel.grid.minor.x = element_blank()) +
+    labs(y="Cumulative frequency of play", x = "Artist rank (log scale)")
+
+```
+
+
+```{r long_tail_album, eval=FALSE}
+# gg1 <- arrange(al, desc(n_listen)) %>%
+#   filter(!is.na(n_listen)) %>% 
+#   mutate(rank = 1:n()) %>%
+#   ggplot(aes(rank, n_listen)) +
+#     geom_point() +
+#     geom_line() +
+#     labs(x = "Album rank", y = "# of listen (log scale)") +
+#     scale_y_log10()
+# 
+# gg2 <- arrange(al, desc(n_users)) %>%
+#   filter(!is.na(n_listen)) %>% 
+#   mutate(rank = 1:n()) %>%
+#   ggplot(aes(rank, n_users)) +
+#     geom_point() +
+#     geom_line() +
+#     labs(x = "Album rank", y = "# of distinct users (log scale)") +
+#     scale_y_log10(breaks = c(0, 10, 100, 1000))
+# 
+# grid.arrange(gg1, gg2, ncol = 2)
+```
+
+Despite the problems highlighted infra, we can compare this distribution with offline sales in 2008 as studied by @bourreau2011_Ladiversiteculturelle. We note that the  overall distribution is similar, at least for the metrics that we can replicate, although digital plays are a bit less concentrated at the 50% level.
+
+```{r initialize_album_data}
+df <- count(st, alb_id) %>% 
+  arrange(desc(n)) %>% 
+  mutate(n_cum = cumsum(n) / sum(n))
+
+```
+
+
+```{r table_comparison_bourreau}
+data_frame(` ` = c("Frequency of albums making up to 50% of total sales/play",
+                   "Frequency of albums making up to 80% of total sales/play"),
+           `Physical sales (Bourreau et al., 2011)` = c("0.35%", "6.7%"),
+           `Digital plays (our data)` = paste0(c((sum(df$n_cum < 0.5) / nrow(df) * 100) %>% round(1),
+                                                 (sum(df$n_cum < 0.8) / nrow(df) * 100) %>% round(1)),"%")) %>% 
+  kable(caption = "Comparison of distribution of digital plays (2013) and physical sales (2008)")
+```
+
+```{r check_top_100}
+data_frame(`Variable` = c("Top 100", "Top 1000"),
+           `Physical sales (Bourreau et al., 2011)` = c("38%", "64%"),
+           `Digital plays (our data)` = paste0(c((slice(df, 100)$n_cum * 100) %>% round(1), (slice(df, 1000)$n_cum * 100) %>% round(1)), "%")
+) %>% 
+  kable(caption = "Proportion of top 100/1000 albums in total plays")
+
+```
+
+Concentration is usually measured through a Gini index. While we adopt another measure in the rest of the article, they are easier to read, as they range between 0 (total equality) and 1 (total concentration, one artist has all the attention). The very high gini index (table below) indicate high inequalities.
+
+<!-- Sans doute pas la meilleure chose à faire de chercher le Gini plutôt que autre chose. -->
+
+```{r table_gini_concentration}
+data_frame(Metric = c("# of listen",
+                      "# of distinct users"),
+           Gini = c(reldist::gini(ar$n_listen[!is.na(ar$n_listen)]),
+                    reldist::gini(ar$n_users[!is.na(ar$n_users)])) %>% round(3)) %>% 
+  kable(caption = "Concentration of consumption")
+```
+
+It shall be noted that we did not have access to the full catalog of the music service, but only the tracks listened to by our sample. The service does not release the number of different artists available, but claims to host 35M tracks, of which less than 1M are listened by our sample. This means that there probably are several thousand artists present in the catalog but not used by people from our sample (which should appear in the longer tail of the previous figure).
+
+```{r table_description_catalog}
+tibble(
+  Metric = c("# of distinct artists", "# of distinct tracks"), 
+  Sample = c(nrow(distinct(st, art_id)),
+             nrow(distinct(st, sng_id))),
+  Catalog = c("Unknown", "35M")) %>% 
+  kable(caption = "Artists and tracks in the catalog and in the sample")
+```
+
+# Genres: The tyranny of popular music
+
+<!-- Maybe add here the number of different users. -->
+
+```{r table_freq_genre}
+x <- filter(st, !is.na(genre)) %>% 
+  group_by(genre, legit) %>% 
+  summarise(`# of plays` = n(),
+            `# of unique artists` = n_distinct(art_id)) %>% 
+   group_by(legit) %>% 
+   mutate(`Legit%` = sum(`# of plays`)) %>% 
+   ungroup() %>% 
+   arrange(legit, desc(`# of plays`)) %>% 
+   mutate(`Legit%` = `Legit%`/sum(`# of plays`)*100,
+          `% of plays` = `# of plays`/sum(`# of plays`)*100,
+          `Cumul. % of plays` = cumsum(`% of plays`),
+          `% of unique artists` = `# of unique artists`/sum(`# of unique artists`)*100,
+          `Cumul. % of unique artists` = cumsum(`% of unique artists`))
+  
+
+mutate_at(x, .vars = vars(`Legit%`:`Cumul. % of unique artists`), .funs = ~paste0(round(.x, 1), "%")) %>% 
+  kable(format.args = list(big.mark = " "))
+```
+
+```{r barplot_freq_selected_genres}
+select(x, genre, `% of plays`, `% of unique artists`) %>% 
+  gather(key, value, -genre) %>% 
+  filter(!(genre %in% c("Reggae", "Blues", "Musicals", "Movies/games", "Kids' music"))) %>% 
+  mutate(genre = factor(genre, levels = (x$genre)) %>% droplevels()) %>% 
+  ggplot(aes(genre, value, fill = key)) +
+    geom_col(position = "dodge") +
+    coord_flip() +
+    labs(y = "Proportion (in %)", x = "Genre", fill = "Metric")
+```
+
+```{r barplot_freq_selected_genres_legitfacet}
+y <- select(x, genre, `% of plays`, `% of unique artists`, legit) %>% 
+  gather(key, value, -genre, -legit) %>% 
+  filter(!is.na(legit)) %>% 
+  mutate(genre = factor(genre, levels = (x$genre)) %>% droplevels())
+
+ggl <- ggplot(filter(y, legit == "Lowbrow"), aes(genre, value, fill = key)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  guides(fill = FALSE) +
+  scale_y_continuous(limits = c(0, 25)) +
+  labs(y = "Proportion (in %)", x = "", fill = "Metric")
+ggm <- ggplot(filter(y, legit == "Middlebrow"), aes(genre, value, fill = key)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  guides(fill = FALSE) +
+  scale_y_continuous(limits = c(0, 15)) +
+  labs(y = "", x = "", fill = "Metric")
+ggh <- ggplot(filter(y, legit == "Highbrow"), aes(genre, value, fill = key)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  guides(fill = FALSE) +
+  scale_y_continuous(limits = c(0, 15)) +
+  labs(y = "Proportion (in %)", x = "", fill = "Metric")
+leg <- grid::legendGrob(labels = c("% of plays", "% of unique artists"), ncol = 2, gp = grid::gpar(fill = c("green", "blue")))
+grid.arrange(ggl, ggm, ggh, leg, layout_matrix = rbind(c(1, 2), c(1, 2), c(1, 3), 
+                                                  c(4, 4)))
+```
+
+
+```{r barplot_freq_legit}
+x <- filter(st, !is.na(legit)) %>% 
+  group_by(legit) %>% 
+  summarise(`# of plays` = n(),
+            `# of unique artists` = n_distinct(art_id)) %>% 
+  arrange(desc(`# of plays`)) %>% 
+  mutate(`% of plays` = `# of plays`/sum(`# of plays`)*100,
+         `Cumul. % of plays` = cumsum(`% of plays`),
+         `% of unique artists` = `# of unique artists`/sum(`# of unique artists`)*100,
+         `Cumul. % of unique artists` = cumsum(`% of unique artists`))
+
+select(x, legit, `% of plays`, `% of unique artists`) %>% 
+  gather(key, value, -legit) %>% 
+  ggplot(aes(legit, value, fill = key)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  labs(y = "Proportion (in %)", x = "Legitimacy level", fill = "Metric")
+```
+
+
+```{r table_freq_legit}
+mutate_at(x, .vars = vars(`% of plays`:`Cumul. % of unique artists`), .funs = funs(paste0(round(., 1), "%"))) %>% 
+  kable(format.args = list(big.mark = " "))
+
+```
+
+Analysis of the top artists shows that: they are indeed stars (well known), none are from highbrow genre. Differences between number of play and number of users show that some are more consumed in a devoted sub-population (although it is also quite large) while other are more consensual (listened by everyone, but not as much). Notable representant of the first kind are Jul and Booba (French hip-hop), Eminem and Michael Jackson ; of the second are Lilly Wood And The Prick and Asaf Avidan (folk rock "France Inter" style)
+
+```{r table_top_artists}
+top_li <- arrange(ar, desc(n_listen)) %>% 
+  slice(1:50) %>% 
+  select(art_name, n_listen, n_users) %>% 
+  mutate(rank_listen = 1:50)
+
+top_us <- arrange(ar, desc(n_users)) %>% 
+  slice(1:50) %>% 
+  select(art_name, n_listen, n_users) %>% 
+  mutate(rank_user = 1:50)
+
+full_join(top_li, top_us) %>% 
+  mutate(diff = rank_user - rank_listen) %>% 
+  mutate_all(funs(ifelse(is.na(.), "", .))) %>% 
+  rename(`Artist name` = art_name,
+         `# Listen` = n_listen,
+         `# Distinct users` = n_users,
+         `# Listen rank` = rank_listen,
+         `# Distinct user rank` = rank_user,
+         `Difference` = diff) %>% 
+  kable(caption = "Fifty most listened artists")
+```
+
+## Diversité
+
+```{r}
+
+x <- count(st, guid, art_id) %>% 
+  filter(!is.na(art_id)) %>% 
+  group_by(guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarize(ag_art_div = prod(f^f)^-1) 
+y <- count(st, guid, genre) %>% 
+  filter(!is.na(genre)) %>% 
+  group_by(guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarize(ag_genre_div = prod(f^f)^-1) 
+z <- count(st, guid, legit) %>% 
+  filter(!is.na(legit)) %>% 
+  group_by(guid) %>% 
+  mutate(f = n/sum(n)) %>% 
+  summarize(ag_legit_div = prod(f^f)^-1) 
+full_join(x, y) %>% 
+  full_join(z) %>% 
+  kable(caption = "Aggregate diversity")
+
+```
+
+## For each user, rank of genre
+
+```{r}
+count(st, user_id, genre) %>% 
+  filter(!is.na(genre)) %>% 
+  group_by(user_id) %>% 
+  mutate(f = n / sum(n)) %>% 
+  arrange(desc(n)) %>% 
+  mutate(rank = row_number()) %>% 
+  group_by(rank) %>% 
+  summarise(f = mean(f)) %>% 
+  ggplot(aes(rank, f)) +
+    geom_col()
+```
+
+```{r}
+count(st, user_id, genre) %>% 
+  filter(!is.na(genre)) %>% 
+  group_by(user_id) %>% 
+  mutate(f = n / sum(n)) %>% 
+  arrange(desc(n)) %>% 
+  mutate(rank = row_number()) %>% 
+  ggplot(aes(factor(rank), f)) +
+    geom_boxplot() +
+    labs(x = "Rank of genre", y = "Frequency")
+```
+
+
+## Algo
+
+```{r table_distribution_stock_reco_play}
+tabyl(st, guid) %>% 
+  kable(caption = "Distribution of guided/unguided plays")
+```
+
+```{r table_distribution_stock_reco_algo_ed_play}
+tabyl(st, type_guid) %>% 
+  kable(caption = "Distribution of recommended plays")
+```
+
+# Duration
+
+```{r}
+group_by(st, genre) %>% 
+  summarize(mean_duration = mean(duration, na.rm=TRUE))
+```
+

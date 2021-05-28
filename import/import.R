@@ -15,6 +15,7 @@ library(here)
 ## Produire le fichier des genres:
 # source("scripts/genres_codage.R")
 load(here("data", "genres.RData"))
+genres <- ungroup(genres)
 
 ###### Songs ######
 
@@ -384,6 +385,7 @@ pl <- mutate(pl,
   select(id, recl)
 
 st <- left_join(st, pl, by = c(context_id = "id"))
+# tabyl(st, recl)
 st <- mutate(st, context_name = ifelse(context_name == "playlist_page" & !is.na(recl), recl, context_name))
 
 st <- mutate(st, context_cat = factor(context_cat_dic[context_name]))
@@ -405,31 +407,34 @@ so <- left_join(so, select(genres, genre = name, alb_id), by = "alb_id")
 rm(genres)
 
 ### Genre classification by legitimacy level
-omni_dic <- c(
-  "Classical" = "Highbrow",
-  "Jazz" = "Highbrow",
-  
-  "Rock" = "Middlebrow",
-  "French songs" = "Middlebrow",
-  "World music" = "Middlebrow",
-  "Alternative" = "Middlebrow", 
-  
-  "Hip-hop" = "Lowbrow",
-  "Metal" = "Lowbrow",
-  "Dance" = "Lowbrow",
-  "Pop" = "Lowbrow",
-  "R&B" = "Lowbrow",
-  "Soul" = "Lowbrow",
-  "Electronic" = "Lowbrow",
-  
-  "Kids' music" = "Unclassified",
-  "Musicals" = "Unclassified",
-  "Blues" = "Unclassified",
-  "Country & Folk" = "Unclassified",
-  "Reggae" = "Unclassified", 
-  "Movies/games" = "Unclassified")
+st <- mutate(st,
+             genre = fct_recode(genre,
+                                `Kids' music` = "Jeunesse",
+                                Musicals = "Comédies musicales",
+                                `French songs` = "Chanson française",
+                                Classical = "Classique",
+                                `Hip-hop` = "Rap/Hip Hop",
+                                Electronic = "Electro",
+                                `Movies/games` = "Films/Jeux vidéo"  ))
 
-st <- mutate(st, legit = omni_dic[genre] %>% factor(levels = c("Lowbrow", "Middlebrow", "Highbrow"))) #Unclassified
+
+st <- mutate(st, legit = fct_collapse(genre,   "Highbrow" = c("Classical", "Jazz"),
+                                      "Middlebrow" = c("Rock", "French songs", "World music",   "Alternative"),
+                                      "Lowbrow" = c("Hip-hop",
+                                                    "Metal",
+                                                    "Dance",
+                                                    "Pop",
+                                                    "R&B",
+                                                    "Soul",
+                                                    "Electronic")),
+             legit = na_if(legit, "Kids' music"),
+             legit = na_if(legit, "Musicals"),
+             legit = na_if(legit, "Blues"),
+             legit = na_if(legit, "Country & Folk"),
+             legit = na_if(legit, "Reggae"),
+             legit = na_if(legit, "Movies/games"),
+             legit = fct_drop(legit))
+             
 
 st <- mutate(st, guid = ifelse(context_cat %in% c("ND", "unknown"),
                                NA,
@@ -502,11 +507,13 @@ x <- count(st, user_id, context_cat) %>%
 
 us <- x %>% 
   summarize(nb_dispositifs = n()) %>% 
-  right_join(us)
+  ungroup() %>% 
+  right_join(us, by = "user_id")
 
 us <- filter(x, context_cat %in% c("feed_radio", "radio_editoriale", "radio_flow", "smart_radio")) %>% 
   summarize(freq_radio = sum()) %>% 
-  right_join(us)
+  ungroup() %>% 
+  right_join(us, by = "user_id")
 
 us <- filter(st, sng_pop == "Star") %>% 
   count(user_id, sng_pop) %>% 

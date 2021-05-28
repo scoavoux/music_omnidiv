@@ -1,0 +1,170 @@
+---
+title: "Omnivorism: streaks"
+author: "Samuel Coavoux"
+output: 
+  html_document: 
+    fig_caption: yes
+    fig_height: 7
+    fig_width: 10
+    number_sections: yes
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE,
+               error = FALSE,
+               echo = FALSE,
+               warning = FALSE,
+               results = 'asis',
+               fig.path = "plot/")#,
+               #dpi = 1200)
+```
+
+```{r packages}
+library(tidyverse)
+library(lubridate)
+library(here)
+library(forcats)
+library(janitor)
+```
+
+```{r data}
+load(here("data", "streams_streak.RData"))
+st <- select(st, streak, guid, legit, art_id, genre)
+st <- mutate(st, legit = factor(legit, levels = c("Lowbrow", "Middlebrow", "Highbrow")),
+             guid = factor(guid, levels = c("Non guidée", "Guidée"), labels = c("Stock", "Recommended")))
+```
+
+# Sequence are stock or rec?
+
+```{r}
+st <- count(st, streak, guid) %>% 
+  filter(!is.na(guid)) %>% 
+  group_by(streak) %>% 
+  mutate(n = n()) %>% 
+  ungroup() %>% 
+  filter(n < 1.5) %>% 
+  select(streak, streak_guid = guid) %>% 
+  right_join(st)
+
+```
+
+```{r}
+group_by(st, streak) %>% 
+  slice(1) %>% 
+  tabyl(streak_guid) %>% 
+  kable(caption = "Guid of sequences")
+```
+
+```{r}
+count(st, streak) %>% 
+  pull(n) %>% 
+  summary()
+  
+```
+
+
+# Are two following plays from same artist?
+
+```{r}
+select(st, streak, art_id) %>% 
+  mutate(same_art_id = art_id == lag(art_id)) %>% 
+  tabyl(same_art_id) %>% 
+  kable(caption = "Two following plays from same artist in streaks")
+```
+
+```{r}
+select(st, streak, art_id, streak_guid) %>% 
+  filter(!is.na(streak_guid)) %>% 
+  group_by(streak_guid) %>% 
+  mutate(same_art_id = art_id == lag(art_id)) %>% 
+  filter(!is.na(same_art_id)) %>% 
+  tabyl(streak_guid, same_art_id) %>% 
+  adorn_percentages() %>% 
+  adorn_pct_formatting() %>% 
+  kable(caption = "Two following plays from same artist in streaks")
+```
+
+# Are two following plays from same genre?
+
+```{r}
+select(st, streak, genre) %>% 
+  mutate(same_genre = genre == lag(genre)) %>% 
+  tabyl(same_genre) %>% 
+  kable(caption = "Two following plays from same genre in streaks")
+```
+
+```{r}
+select(st, streak, genre, streak_guid) %>% 
+  filter(!is.na(streak_guid)) %>% 
+  group_by(streak_guid) %>% 
+  mutate(same_genre = genre == lag(genre)) %>% 
+  filter(!is.na(same_genre)) %>% 
+  tabyl(streak_guid, same_genre) %>% 
+  adorn_percentages() %>% 
+  adorn_pct_formatting() %>% 
+  kable(caption = "Two following plays from same genre in streaks")
+```
+
+# Are two following plays from same artist?
+
+```{r}
+select(st, streak, legit) %>%
+  mutate(same_legit = legit == lag(legit)) %>% 
+  tabyl(same_legit) %>% 
+  kable(caption = "Two following plays from same legitimacy level in streaks")
+```
+
+```{r}
+select(st, streak, legit, streak_guid) %>% 
+  filter(!is.na(streak_guid)) %>% 
+  group_by(streak_guid) %>% 
+  mutate(same_legit = legit == lag(legit)) %>% 
+  filter(!is.na(same_legit)) %>% 
+  tabyl(streak_guid, same_legit) %>% 
+  adorn_percentages() %>% 
+  adorn_pct_formatting() %>% 
+  kable(caption = "Two following plays from same legitimacy level in streaks")
+```
+
+# Transition matrixes
+
+```{r, fig.width=12}
+x <- select(st, streak, genre, streak_guid) %>% 
+ filter(!is.na(streak_guid)) %>% 
+ group_by(streak_guid) %>% 
+ mutate(pr_genre = lag(genre))
+count(x, genre, pr_genre) %>% 
+  filter(!is.na(genre), !is.na(pr_genre)) %>% 
+  group_by(streak_guid, pr_genre) %>% 
+  mutate(f = n / sum(n)) %>% 
+  ggplot(aes(genre, pr_genre, fill = f*100, label = round(f * 100,1))) +
+    geom_tile() +
+    geom_text() +
+    scale_fill_continuous() +
+    facet_wrap(~streak_guid) +
+    labs(y = "Genre of track n", x = "Genre of track n+1", fill = "Transition rate") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+x <- select(st, streak, legit, streak_guid) %>% 
+ filter(!is.na(streak_guid)) %>% 
+ group_by(streak_guid) %>% 
+ mutate(pr_legit = lag(legit))
+count(x, legit, pr_legit) %>% 
+  filter(!is.na(legit), !is.na(pr_legit)) %>% 
+  group_by(streak_guid, pr_legit) %>% 
+  mutate(f = n / sum(n)) %>% 
+  ggplot(aes(legit, pr_legit, fill = f*100, label = round(f * 100,1))) +
+    geom_tile() +
+    geom_text() +
+    scale_fill_continuous() +
+    facet_wrap(~streak_guid) +
+    labs(y = "Legitimacy of track n", x = "Legitimacy of track n+1", fill = "Transition rate") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```

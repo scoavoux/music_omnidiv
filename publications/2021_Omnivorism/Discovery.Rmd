@@ -1,0 +1,124 @@
+---
+title: "Omnivorism: misc"
+author: "Samuel Coavoux"
+output: 
+  html_document: 
+    fig_caption: yes
+    fig_height: 7
+    fig_width: 10
+    number_sections: yes
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(message = FALSE,
+               error = FALSE,
+               echo = FALSE,
+               warning = FALSE,
+               results = 'asis',
+               fig.path = "plot/")#,
+               #dpi = 1200)
+```
+
+```{r packages}
+library(tidyverse)
+library(lubridate)
+library(here)
+library(forcats)
+library(janitor)
+```
+
+```{r data}
+load(here("data", "streams.RData"))
+load(here("data", "favorites.RData"))
+```
+
+# Discovery
+
+```{r data_premiere_fois}
+## Créer un sous-ensemble de tracks écoutées pour la première fois (artiste écouté pour la première fois & non-favori)
+st <- select(st, user_id, art_id, sng_id, alb_id, timestamp, context_cat)
+st <- mutate(st, timestamp = ymd_hms(timestamp))
+fal <- filter(fal, add == 1)
+far <- filter(far, add == 1)
+
+fs <- mutate(fs, timestamp_favsong = as_datetime(as.numeric(timestamp_favsong), tz="Europe/Paris") %>% ymd_hms())
+fal <- mutate(fal, timestamp_favalbum = as_datetime(as.numeric(timestamp_favalbum), tz="Europe/Paris") %>% ymd_hms())
+far <- mutate(far, timestamp_favartist = as_datetime(as.numeric(timestamp_favartist), tz="Europe/Paris") %>% ymd_hms())
+
+stpf <- group_by(st, user_id, art_id) %>% 
+  mutate(n_reecoute = n()) %>% 
+  arrange(timestamp) %>% 
+  slice(1) %>% 
+  filter(!(context_cat %in% c("stock", "unknown", "playlist_page_personal_playlist", "ND")), 
+         !is.na(context_cat)) %>% 
+  ungroup()
+stpf$context_cat <- droplevels(stpf$context_cat)
+stpf <- left_join(stpf, fal) %>% 
+  left_join(far) %>% 
+  left_join(fs)
+stpf <- filter(stpf,
+               timestamp > ymd(20140430),
+               timestamp < timestamp_favsong | is.na(timestamp_favsong),
+               timestamp < timestamp_favalbum | is.na(timestamp_favalbum),
+               timestamp < timestamp_favartist | is.na(timestamp_favartist))
+stpf <- mutate(stpf, fav = !(is.na(timestamp_favalbum) & is.na(timestamp_favartist) & is.na(timestamp_favsong)))
+```
+
+Ces premières écoutes se font environ deux fois plus souvent via les playlists
+
+```{r distribution_dispositif_premiere_ecoute}
+tabyl(stpf, context_cat, sort = "dec") %>% 
+  kable(caption = "Distribution des dispositifs pour les premières écoutes (première écoute d'un artiste non favori au moment de l'écoute)")
+```
+
+Les premières écoutes qui se font par le top concernent beaucoup plus souvent des artistes stars, logiquement. Idem pour player-default, social, et surtout experts_editor. 
+
+```{r}
+```
+
+
+```{r association_dispositif_popularite_premiereecoute}
+tabyl(stpf, context_cat, sng_pop) %>% 
+  adorn_percentages() %>% 
+  adorn_pct_formatting() %>% 
+  kable(digits = 1, caption = "Association entre dispositif et popularité de l'artiste pour les premières écoutes")
+```
+
+```{r distribution_nombre_reecoute_par_dispositif_premiereecoute}
+group_by(stpf, context_cat) %>% 
+  summarize(mean = mean(n_reecoute),
+            median = median(n_reecoute),
+            sd = sd(n_reecoute),
+            q3 = quantile(n_reecoute, .75),
+            d9 = quantile(n_reecoute, .9),
+            max = max(n_reecoute)) %>% 
+  arrange(desc(mean)) %>% 
+  kable(caption = "Distribution du nombre de réécoute par dispositif de première écoute / non_favori")
+```
+
+```{r}
+summary(stpf$n_reecoute) %>% 
+  broom::tidy() %>% 
+  kable(caption = "Summary of nombre de réécoutes")
+```
+
+# Favorites
+
+```{r}
+tabyl(stpf, fav) %>% 
+  kable(caption = "Becomes favorite")
+```
+
+
+```{r}
+count(stpf, context_cat, fav) %>% 
+  group_by(context_cat) %>% 
+  mutate(f = n / sum(n) *100) %>% 
+  filter(fav) %>% 
+  arrange(desc(f)) %>% 
+  kable(caption = "Proportion of fav artist/album/song by discovery context")
+```
